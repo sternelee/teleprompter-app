@@ -25,6 +25,15 @@ const SCENE_SUGGESTIONS = [
   '🏨 Hotel check-in',
   '🍜 Ordering at a restaurant',
   '🛒 Grocery shopping',
+  '🏥 Doctor appointment',
+  '🚕 Taking a taxi',
+  '🎬 Buying movie tickets',
+  '🏦 Opening a bank account',
+  '📞 Calling customer service',
+  '🎂 Ordering a birthday cake',
+  '🏋️ Joining a gym',
+  '📚 Asking directions',
+  '🍕 Ordering pizza delivery',
 ];
 
 export default function SceneInputScreen() {
@@ -84,11 +93,7 @@ export default function SceneInputScreen() {
               Enter a scene and practice speaking English with AI-powered dialogue
             </ThemedText>
 
-            <ScrollView
-              horizontal
-              showsHorizontalScrollIndicator={false}
-              contentContainerStyle={styles.chipsContainer}
-            >
+            <View style={styles.chipsContainer}>
               {SCENE_SUGGESTIONS.map((suggestion) => (
                 <Pressable
                   key={suggestion}
@@ -103,7 +108,7 @@ export default function SceneInputScreen() {
                   </ThemedText>
                 </Pressable>
               ))}
-            </ScrollView>
+            </View>
 
             {showKeyInput ? (
               <ThemedView type="backgroundContent" style={styles.card}>
@@ -245,17 +250,21 @@ const styles = StyleSheet.create({
     marginBottom: Spacing.md,
   },
   chipsContainer: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    alignItems: 'center',
     gap: Spacing.sm,
     paddingBottom: Spacing.md,
   },
   chip: {
     backgroundColor: '#eaddc5',
-    paddingVertical: Spacing.sm,
-    paddingHorizontal: Spacing.md,
-    borderRadius: Radius.pill,
+    paddingVertical: 4,
+    paddingHorizontal: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: Radius.base,
     borderWidth: 1.5,
     borderColor: '#c4b89e',
-    marginRight: Spacing.sm,
   },
   chipPressed: {
     opacity: 0.7,
@@ -280,9 +289,9 @@ const styles = StyleSheet.create({
   input: {
     borderWidth: 2.5,
     borderColor: '#c4b89e',
-    borderRadius: Radius.pill,
+    borderRadius: Radius.base,
     paddingHorizontal: Spacing.lg,
-    paddingVertical: Spacing.sm,
+    paddingVertical: 4,
     fontSize: 16,
     fontFamily: 'Nunito',
     fontWeight: '500',
@@ -341,17 +350,17 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  keyLinkContainer: {
-    alignItems: 'center',
-    marginBottom: Spacing.md,
-  },
   link: {
     textAlign: 'center',
     paddingVertical: Spacing.sm,
+    marginBottom: Spacing.md,
+  },
+  keyLinkContainer: {
+    marginBottom: Spacing.md,
   },
   keyHelper: {
     textAlign: 'center',
-    marginTop: -Spacing.xs,
+    marginTop: -Spacing.sm,
   },
   error: {
     color: '#e05a5a',
