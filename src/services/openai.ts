@@ -85,7 +85,7 @@ export async function generateDialogue(
   let parsed;
   try {
     parsed = JSON.parse(extractJson(content));
-  } catch (err) {
+  } catch {
     throw new Error(`Invalid JSON from BigModel: ${content.slice(0, 200)}...`);
   }
 

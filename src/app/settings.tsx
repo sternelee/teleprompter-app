@@ -27,10 +27,10 @@ export default function SettingsScreen() {
         <ThemedView type="backgroundContent" style={styles.card}>
           <View style={styles.iconRow}>
             <ThemedText style={styles.icon}>🔑</ThemedText>
-            <ThemedText type="smallBold" style={styles.cardTitle}>OpenAI API Key</ThemedText>
+            <ThemedText type="smallBold" style={styles.cardTitle}>BigModel API Key</ThemedText>
           </View>
           <ThemedText type="small" themeColor="textSecondary">
-            Your API key is stored only in memory and never sent to any server other than OpenAI.
+            Your API key is stored only in memory and never sent to any server other than BigModel.
           </ThemedText>
           <TextInput
             style={styles.input}
@@ -38,7 +38,6 @@ export default function SettingsScreen() {
             placeholderTextColor="#c4b89e"
             value={apiKey}
             onChangeText={setApiKey}
-            secureTextEntry
             autoCapitalize="none"
           />
         </ThemedView>

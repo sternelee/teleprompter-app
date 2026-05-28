@@ -24,9 +24,18 @@ export default function TeleprompterScreen() {
   const { apiKey, scene, segments, appendSegments, isGenerating, setIsGenerating } = useApp();
   const [isReading, setIsReading] = useState(false);
   const [btnPressed, setBtnPressed] = useState(false);
+  const [resetPressed, setResetPressed] = useState(false);
+  const [blinkVisible, setBlinkVisible] = useState(true);
   const scrollViewRef = useRef<ScrollView>(null);
   const wordPositionsRef = useRef<Map<number, number>>(new Map());
   const fetchingRef = useRef(false);
+
+  // Blinking dot for listening indicator
+  useEffect(() => {
+    if (!isReading) return;
+    const interval = setInterval(() => setBlinkVisible((v) => !v), 600);
+    return () => clearInterval(interval);
+  }, [isReading]);
 
   const allWords = useMemo(() => {
     return segments.flatMap((seg, segIdx) => {
@@ -127,12 +136,19 @@ export default function TeleprompterScreen() {
     }
   }, [isReading, resetProgress]);
 
+  const handleRestart = useCallback(() => {
+    setIsReading(false);
+    resetProgress();
+    scrollViewRef.current?.scrollTo({ y: 0, animated: true });
+  }, [resetProgress]);
+
   const handleBack = useCallback(() => {
     setIsReading(false);
     router.back();
   }, [router]);
 
   const progress = totalWords > 0 ? ((currentWordIndex + 1) / totalWords) * 100 : 0;
+  const spokenCount = currentWordIndex >= 0 ? currentWordIndex + 1 : 0;
 
   return (
     <ThemedView style={styles.container}>
@@ -155,6 +171,13 @@ export default function TeleprompterScreen() {
           <View style={[styles.progressBarFill, { width: `${Math.min(100, progress)}%` }]} />
         </View>
 
+        {/* Word count */}
+        <View style={styles.wordCountRow}>
+          <ThemedText type="small" themeColor="textSecondary">
+            {spokenCount} / {totalWords} words
+          </ThemedText>
+        </View>
+
         {/* Teleprompter content */}
         <ScrollView
           ref={scrollViewRef}
@@ -171,47 +194,80 @@ export default function TeleprompterScreen() {
           />
         </ScrollView>
 
+        {/* Listening indicator */}
+        {isListening && (
+          <View style={styles.listeningBar}>
+            <View
+              style={[
+                styles.listeningDot,
+                { opacity: blinkVisible ? 1 : 0.35 },
+              ]}
+            />
+            <ThemedText type="small" themeColor="textSecondary" style={styles.listeningText}>
+              Listening... speak clearly
+            </ThemedText>
+          </View>
+        )}
+
+        {!hasPermission && (
+          <View style={styles.permissionBar}>
+            <ThemedText type="small" style={styles.permissionWarning}>
+              🎤 Microphone permission required for speech recognition
+            </ThemedText>
+          </View>
+        )}
+
         {/* Controls */}
         <View style={styles.controls}>
-          <Pressable
-            onPress={handleToggleReading}
-            onPressIn={() => setBtnPressed(true)}
-            onPressOut={() => setBtnPressed(false)}
-          >
-            <ThemedView
-              type={isReading ? 'error' : 'primary'}
-              style={[
-                styles.controlButton,
-                btnPressed && styles.controlButtonActive,
-              ]}
+          <View style={styles.controlRow}>
+            <Pressable
+              onPress={handleRestart}
+              onPressIn={() => setResetPressed(true)}
+              onPressOut={() => setResetPressed(false)}
+              style={styles.resetButtonWrap}
             >
-              <ThemedText type="smallBold" style={styles.controlButtonText}>
-                {isReading ? '⏸ Pause' : '🎤 Start Speaking'}
-              </ThemedText>
-            </ThemedView>
-          </Pressable>
+              <ThemedView
+                type="backgroundElement"
+                style={[
+                  styles.resetButton,
+                  resetPressed && styles.resetButtonActive,
+                ]}
+              >
+                <ThemedText type="smallBold" style={styles.resetButtonText}>
+                  🔄 Restart
+                </ThemedText>
+              </ThemedView>
+            </Pressable>
+
+            <Pressable
+              onPress={handleToggleReading}
+              onPressIn={() => setBtnPressed(true)}
+              onPressOut={() => setBtnPressed(false)}
+              style={styles.mainControlWrap}
+            >
+              <ThemedView
+                type={isReading ? 'error' : 'primary'}
+                style={[
+                  styles.controlButton,
+                  btnPressed && styles.controlButtonActive,
+                ]}
+              >
+                <ThemedText type="smallBold" style={styles.controlButtonText}>
+                  {isReading ? '⏸ Pause' : '🎤 Start Speaking'}
+                </ThemedText>
+              </ThemedView>
+            </Pressable>
+          </View>
 
           {corrections.length > 0 && (
             <ThemedView type="backgroundContent" style={styles.correctionsPanel}>
               <ThemedText type="smallBold" style={styles.tipTitle}>🌿 Practice Tips</ThemedText>
               {corrections.slice(-3).map((c, i) => (
                 <ThemedText key={i} type="small" themeColor="textSecondary">
-                  Try "{c.expected}" (you said: {c.actual})
+                  Try &quot;{c.expected}&quot; (you said: {c.actual})
                 </ThemedText>
               ))}
             </ThemedView>
-          )}
-
-          {!hasPermission && (
-            <ThemedText type="small" style={styles.permissionWarning}>
-              🎤 Microphone permission required for speech recognition
-            </ThemedText>
-          )}
-
-          {isListening && (
-            <ThemedText type="small" themeColor="textSecondary" style={styles.listeningIndicator}>
-              ● Listening...
-            </ThemedText>
           )}
         </View>
       </SafeAreaView>
@@ -263,11 +319,47 @@ const styles = StyleSheet.create({
     backgroundColor: '#6fba2c',
     borderRadius: Radius.pill,
   },
+  wordCountRow: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    paddingTop: Spacing.xs,
+    paddingBottom: Spacing.xs,
+  },
   scrollView: {
     flex: 1,
   },
   scrollContent: {
     paddingBottom: Spacing.xl,
+  },
+  listeningBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: Spacing.sm,
+    paddingVertical: Spacing.sm,
+    backgroundColor: 'rgba(25, 200, 185, 0.08)',
+    borderTopWidth: 1,
+    borderTopColor: '#e6f9f6',
+  },
+  listeningDot: {
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+    backgroundColor: '#19c8b9',
+  },
+  listeningText: {
+    fontWeight: '600',
+  },
+  permissionBar: {
+    paddingVertical: Spacing.sm,
+    backgroundColor: 'rgba(224, 90, 90, 0.08)',
+    borderTopWidth: 1,
+    borderTopColor: '#f8d7da',
+  },
+  permissionWarning: {
+    color: '#e05a5a',
+    textAlign: 'center',
+    fontWeight: '600',
   },
   controls: {
     paddingHorizontal: Spacing.md,
@@ -275,6 +367,36 @@ const styles = StyleSheet.create({
     gap: Spacing.sm,
     borderTopWidth: 2,
     borderTopColor: '#e6f9f6',
+    backgroundColor: '#f8f8f0',
+  },
+  controlRow: {
+    flexDirection: 'row',
+    gap: Spacing.sm,
+    alignItems: 'center',
+  },
+  resetButtonWrap: {
+    width: 100,
+  },
+  resetButton: {
+    paddingVertical: Spacing.md,
+    borderRadius: Radius.pill,
+    alignItems: 'center',
+    borderWidth: 2,
+    borderColor: '#c4b89e',
+    ...Shadows.btn,
+  },
+  resetButtonActive: {
+    transform: [{ translateY: 2 }],
+    ...Shadows.btnActive,
+  },
+  resetButtonText: {
+    color: '#794f27',
+    fontWeight: '700',
+    fontSize: 14,
+    letterSpacing: 0.02,
+  },
+  mainControlWrap: {
+    flex: 1,
   },
   controlButton: {
     paddingVertical: Spacing.md,
@@ -298,19 +420,9 @@ const styles = StyleSheet.create({
     gap: Spacing.xs,
     borderWidth: 2,
     borderColor: '#c4b89e',
-    ...Shadows.input,
   },
   tipTitle: {
     color: '#794f27',
     letterSpacing: 0.02,
-  },
-  permissionWarning: {
-    color: '#e05a5a',
-    textAlign: 'center',
-    fontWeight: '600',
-  },
-  listeningIndicator: {
-    textAlign: 'center',
-    fontWeight: '600',
   },
 });
