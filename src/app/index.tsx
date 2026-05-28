@@ -1,0 +1,279 @@
+import { useState } from 'react';
+import {
+  Pressable,
+  StyleSheet,
+  TextInput,
+  View,
+  KeyboardAvoidingView,
+  Platform,
+  ScrollView,
+} from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import { useRouter } from 'expo-router';
+
+import { ThemedText } from '@/components/themed-text';
+import { ThemedView } from '@/components/themed-view';
+import { Spacing, Radius, Shadows, MaxContentWidth } from '@/constants/theme';
+import { useApp } from '@/contexts/app-context';
+import { generateDialogue } from '@/services/openai';
+
+export default function SceneInputScreen() {
+  const router = useRouter();
+  const { apiKey, setApiKey, setScene, setSegments, isGenerating, setIsGenerating, setGenerationError, generationError } = useApp();
+  const [inputScene, setInputScene] = useState('');
+  const [showKeyInput, setShowKeyInput] = useState(!apiKey);
+  const [buttonPressed, setButtonPressed] = useState(false);
+
+  const handleStart = async () => {
+    if (!inputScene.trim()) return;
+    if (!apiKey) {
+      setShowKeyInput(true);
+      return;
+    }
+
+    setIsGenerating(true);
+    setGenerationError(null);
+    setScene(inputScene.trim());
+
+    try {
+      const segments = await generateDialogue(inputScene.trim(), apiKey);
+      setSegments(segments);
+      router.push('/teleprompter');
+    } catch (err) {
+      setGenerationError(err instanceof Error ? err.message : 'Failed to generate dialogue');
+    } finally {
+      setIsGenerating(false);
+    }
+  };
+
+  return (
+    <ThemedView style={styles.container}>
+      <SafeAreaView style={styles.safeArea}>
+        <KeyboardAvoidingView
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+          style={styles.keyboardAvoider}
+        >
+          <ScrollView
+            contentContainerStyle={styles.scrollContent}
+            keyboardShouldPersistTaps="handled"
+            showsVerticalScrollIndicator={false}
+          >
+            {/* Decorative top leaf */}
+            <View style={styles.leafDecoration}>
+              <ThemedText style={styles.leafEmoji}>🌿</ThemedText>
+            </View>
+
+            <ThemedText type="title" style={styles.title}>
+              Speaking Practice
+            </ThemedText>
+            <ThemedText type="body" themeColor="textSecondary" style={styles.subtitle}>
+              Enter a scene and practice speaking English with AI-powered dialogue
+            </ThemedText>
+
+            {showKeyInput ? (
+              <ThemedView type="backgroundContent" style={styles.card}>
+                <ThemedText type="smallBold" style={styles.cardTitle}>
+                  🔑 OpenAI API Key
+                </ThemedText>
+                <TextInput
+                  style={styles.input}
+                  placeholder="sk-..."
+                  placeholderTextColor="#c4b89e"
+                  value={apiKey}
+                  onChangeText={setApiKey}
+                  autoCapitalize="none"
+                />
+                <Pressable
+                  onPress={() => setShowKeyInput(false)}
+                  onPressIn={() => setButtonPressed(true)}
+                  onPressOut={() => setButtonPressed(false)}
+                >
+                  <ThemedView
+                    type="primary"
+                    style={[
+                      styles.pillButton,
+                      buttonPressed && styles.pillButtonActive,
+                    ]}
+                  >
+                    <ThemedText type="smallBold" style={styles.pillButtonText}>
+                      Done
+                    </ThemedText>
+                  </ThemedView>
+                </Pressable>
+              </ThemedView>
+            ) : (
+              <Pressable onPress={() => setShowKeyInput(true)}>
+                <ThemedText type="link" style={styles.link}>
+                  {apiKey ? '🔑 API Key configured ✓' : '🔑 Configure API Key'}
+                </ThemedText>
+              </Pressable>
+            )}
+
+            <ThemedView type="backgroundContent" style={styles.card}>
+              <ThemedText type="smallBold" style={styles.cardTitle}>
+                🎭 Scene Description
+              </ThemedText>
+              <TextInput
+                style={[styles.input, styles.textArea]}
+                placeholder="e.g., ordering coffee at Starbucks"
+                placeholderTextColor="#c4b89e"
+                value={inputScene}
+                onChangeText={setInputScene}
+                multiline
+                numberOfLines={3}
+              />
+            </ThemedView>
+
+            <Pressable
+              onPress={handleStart}
+              disabled={isGenerating || !inputScene.trim()}
+              onPressIn={() => setButtonPressed(true)}
+              onPressOut={() => setButtonPressed(false)}
+            >
+              <ThemedView
+                type={isGenerating || !inputScene.trim() ? 'backgroundElement' : 'primary'}
+                style={[
+                  styles.mainButton,
+                  buttonPressed && !isGenerating && inputScene.trim() && styles.mainButtonActive,
+                ]}
+              >
+                <ThemedText type="smallBold" style={styles.mainButtonText}>
+                  {isGenerating ? '🌱 Generating...' : '🎤 Start Practice'}
+                </ThemedText>
+              </ThemedView>
+            </Pressable>
+
+            {generationError && (
+              <ThemedText style={styles.error}>{generationError}</ThemedText>
+            )}
+
+            {/* Decorative bottom */}
+            <View style={styles.bottomDecoration}>
+              <ThemedText style={styles.leafEmoji}>🍃 🌸 🍃</ThemedText>
+            </View>
+          </ScrollView>
+        </KeyboardAvoidingView>
+      </SafeAreaView>
+    </ThemedView>
+  );
+}
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+  },
+  safeArea: {
+    flex: 1,
+  },
+  keyboardAvoider: {
+    flex: 1,
+  },
+  scrollContent: {
+    flexGrow: 1,
+    paddingHorizontal: Spacing.lg,
+    paddingVertical: Spacing.xl,
+    maxWidth: MaxContentWidth,
+    alignSelf: 'center',
+    width: '100%',
+  },
+  leafDecoration: {
+    alignItems: 'center',
+    marginBottom: Spacing.sm,
+  },
+  leafEmoji: {
+    fontSize: 28,
+    lineHeight: 36,
+  },
+  title: {
+    textAlign: 'center',
+    color: '#794f27',
+  },
+  subtitle: {
+    textAlign: 'center',
+    marginBottom: Spacing.md,
+  },
+  card: {
+    gap: Spacing.sm,
+    padding: Spacing.lg,
+    borderRadius: Radius.lg,
+    borderWidth: 2,
+    borderColor: '#c4b89e',
+    marginBottom: Spacing.md,
+    ...Shadows.input,
+  },
+  cardTitle: {
+    color: '#794f27',
+    letterSpacing: 0.02,
+  },
+  input: {
+    borderWidth: 2.5,
+    borderColor: '#c4b89e',
+    borderRadius: Radius.pill,
+    paddingHorizontal: Spacing.lg,
+    paddingVertical: Spacing.sm,
+    fontSize: 16,
+    fontFamily: 'Nunito',
+    fontWeight: '500',
+    color: '#725d42',
+    backgroundColor: '#f7f3df',
+    ...Shadows.input,
+  },
+  textArea: {
+    minHeight: 90,
+    borderRadius: Radius.base,
+    paddingTop: Spacing.md,
+    paddingBottom: Spacing.md,
+    textAlignVertical: 'top',
+  },
+  pillButton: {
+    paddingVertical: Spacing.sm,
+    paddingHorizontal: Spacing.xl,
+    borderRadius: Radius.pill,
+    alignItems: 'center',
+    alignSelf: 'center',
+    marginTop: Spacing.sm,
+    ...Shadows.btn,
+  },
+  pillButtonActive: {
+    transform: [{ translateY: 2 }],
+    ...Shadows.btnActive,
+  },
+  pillButtonText: {
+    color: '#fff',
+    fontWeight: '700',
+    letterSpacing: 0.02,
+  },
+  mainButton: {
+    paddingVertical: Spacing.md,
+    borderRadius: Radius.pill,
+    alignItems: 'center',
+    marginTop: Spacing.sm,
+    marginBottom: Spacing.md,
+    ...Shadows.btn,
+  },
+  mainButtonActive: {
+    transform: [{ translateY: 2 }],
+    ...Shadows.btnActive,
+  },
+  mainButtonText: {
+    color: '#fff',
+    fontWeight: '700',
+    fontSize: 16,
+    letterSpacing: 0.02,
+  },
+  link: {
+    textAlign: 'center',
+    paddingVertical: Spacing.sm,
+    marginBottom: Spacing.md,
+  },
+  error: {
+    color: '#e05a5a',
+    textAlign: 'center',
+    fontWeight: '600',
+    marginBottom: Spacing.md,
+  },
+  bottomDecoration: {
+    alignItems: 'center',
+    marginTop: Spacing.lg,
+  },
+});

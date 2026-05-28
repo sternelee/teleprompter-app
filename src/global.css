@@ -1,0 +1,8 @@
+@import url('https://fonts.googleapis.com/css2?family=Nunito:wght@400;500;600;700;800;900&display=swap');
+
+:root {
+  --font-display: Nunito, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  --font-mono: Nunito, ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  --font-rounded: Nunito, 'SF Pro Rounded', sans-serif;
+  --font-serif: Nunito, Georgia, 'Times New Roman', serif;
+}
