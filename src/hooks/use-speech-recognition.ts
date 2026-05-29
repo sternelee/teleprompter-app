@@ -1,105 +1,128 @@
+import { ExpoSpeechRecognitionModule, useSpeechRecognitionEvent } from 'expo-speech-recognition';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import {
-  ExpoSpeechRecognitionModule,
-  useSpeechRecognitionEvent,
-} from 'expo-speech-recognition';
 
-interface UseSpeechRecognitionOptions {
-  onResult: (text: string, isFinal: boolean) => void;
+type UseSpeechRecognitionOptions = {
+  language?: string;
   onError?: (message: string) => void;
-  enabled: boolean;
+  onResult: (transcript: string) => void;
+};
+
+function formatErrorMessage(error: unknown) {
+  if (error instanceof Error) {
+    return error.message;
+  }
+
+  return 'Speech recognition failed. Please try again.';
 }
 
-export function useSpeechRecognition({ onResult, onError, enabled }: UseSpeechRecognitionOptions) {
+export function useSpeechRecognition({
+  language = 'en-US',
+  onError,
+  onResult,
+}: UseSpeechRecognitionOptions) {
+  const [permissionResponse, requestPermission] = ExpoSpeechRecognitionModule.usePermissions();
   const [isListening, setIsListening] = useState(false);
-  const [hasPermission, setHasPermission] = useState<boolean | null>(null);
-  const accumulatedRef = useRef('');
-  const enabledRef = useRef(enabled);
+  const shouldAutoRestartRef = useRef(false);
+  const restartTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  useEffect(() => {
-    enabledRef.current = enabled;
-  }, [enabled]);
-
-  useEffect(() => {
-    ExpoSpeechRecognitionModule.requestPermissionsAsync().then((res) => {
-      setHasPermission(res.granted);
-    });
+  const clearRestartTimer = useCallback(() => {
+    if (restartTimerRef.current) {
+      clearTimeout(restartTimerRef.current);
+      restartTimerRef.current = null;
+    }
   }, []);
 
-  useSpeechRecognitionEvent('result', (event) => {
-    const result = event.results[0];
-    if (!result) return;
+  const emitError = useCallback(
+    (message: string) => {
+      shouldAutoRestartRef.current = false;
+      clearRestartTimer();
+      setIsListening(false);
+      onError?.(message);
+    },
+    [clearRestartTimer, onError]
+  );
 
-    const transcript = result.transcript;
-    const final = event.isFinal;
+  const startListening = useCallback(async () => {
+    const granted =
+      permissionResponse?.granted ??
+      (await requestPermission()).granted;
 
-    if (final) {
-      accumulatedRef.current = accumulatedRef.current
-        ? accumulatedRef.current + ' ' + transcript
-        : transcript;
-      onResult(accumulatedRef.current, true);
-    } else {
-      const interim = accumulatedRef.current
-        ? accumulatedRef.current + ' ' + transcript
-        : transcript;
-      onResult(interim, false);
-    }
-  });
-
-  useSpeechRecognitionEvent('error', (event) => {
-    if (event.error === 'no-speech' || event.error === 'aborted') {
+    if (!granted) {
+      emitError('Microphone permission is required to practice speaking.');
       return;
     }
-    onError?.(event.message);
-    setIsListening(false);
+
+    shouldAutoRestartRef.current = true;
+    clearRestartTimer();
+
+    try {
+      await ExpoSpeechRecognitionModule.start({
+        addsPunctuation: false,
+        continuous: true,
+        interimResults: true,
+        lang: language,
+        maxAlternatives: 1,
+      });
+    } catch (error) {
+      emitError(formatErrorMessage(error));
+    }
+  }, [clearRestartTimer, emitError, language, permissionResponse?.granted, requestPermission]);
+
+  const stopListening = useCallback(async () => {
+    shouldAutoRestartRef.current = false;
+    clearRestartTimer();
+
+    try {
+      await ExpoSpeechRecognitionModule.stop();
+    } catch (error) {
+      emitError(formatErrorMessage(error));
+    }
+  }, [clearRestartTimer, emitError]);
+
+  useSpeechRecognitionEvent('start', () => {
+    setIsListening(true);
+  });
+
+  useSpeechRecognitionEvent('result', (event) => {
+    const transcript =
+      event.results[0]?.transcript ??
+      event.results.at(-1)?.transcript ??
+      '';
+
+    if (transcript) {
+      onResult(transcript);
+    }
   });
 
   useSpeechRecognitionEvent('end', () => {
-    if (enabledRef.current) {
-      setTimeout(() => {
-        if (enabledRef.current) {
-          startListeningInternal();
-        }
-      }, 200);
-    } else {
-      setIsListening(false);
+    setIsListening(false);
+
+    if (!shouldAutoRestartRef.current) {
+      return;
     }
+
+    clearRestartTimer();
+    restartTimerRef.current = setTimeout(() => {
+      void startListening();
+    }, 250);
   });
 
-  const startListeningInternal = useCallback(() => {
-    if (!hasPermission) return;
-
-    ExpoSpeechRecognitionModule.start({
-      lang: 'en-US',
-      interimResults: true,
-      continuous: false,
-      addsPunctuation: false,
-      iosTaskHint: 'dictation',
-    });
-  }, [hasPermission]);
-
-  const startListening = useCallback(() => {
-    if (!hasPermission) return;
-    accumulatedRef.current = '';
-    setIsListening(true);
-    startListeningInternal();
-  }, [hasPermission, startListeningInternal]);
-
-  const stopListening = useCallback(() => {
-    ExpoSpeechRecognitionModule.stop();
-    setIsListening(false);
-  }, []);
+  useSpeechRecognitionEvent('error', (event) => {
+    emitError(event.error ?? 'Speech recognition failed. Please try again.');
+  });
 
   useEffect(() => {
-    if (enabled) {
-      startListening();
-    } else {
-      stopListening();
-    }
     return () => {
-      ExpoSpeechRecognitionModule.abort();
+      shouldAutoRestartRef.current = false;
+      clearRestartTimer();
     };
-  }, [enabled, startListening, stopListening]);
+  }, [clearRestartTimer]);
 
-  return { isListening, hasPermission, startListening, stopListening };
+  return {
+    isListening,
+    permissionResponse,
+    requestPermission,
+    startListening,
+    stopListening,
+  };
 }

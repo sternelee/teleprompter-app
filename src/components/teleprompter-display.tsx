@@ -1,293 +1,176 @@
-import { useCallback, useState } from 'react';
-import {
-  StyleSheet,
-  View,
-  type LayoutChangeEvent,
-  Pressable,
-  Platform,
-} from 'react-native';
+import { StyleSheet, View } from 'react-native';
 
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
-import { Spacing, Radius, NookPalette } from '@/constants/theme';
-import { DialogueSegment, Word, Correction } from '@/types/dialogue';
+import { Colors, NookPalette, Radius, Shadows, Spacing } from '@/constants/theme';
+import type { Correction, DialogueSegment, Word } from '@/types/dialogue';
 
-interface TeleprompterDisplayProps {
-  segments: DialogueSegment[];
-  currentWordIndex: number;
+type TeleprompterDisplayProps = {
+  activeSegmentIndex?: number;
   corrections: Correction[];
-  onWordLayout: (index: number, y: number) => void;
-  isGenerating: boolean;
-}
+  currentWordIndex: number;
+  segments: DialogueSegment[];
+  words: Word[];
+};
 
-function segmentToWords(segments: DialogueSegment[]): Word[] {
-  const words: Word[] = [];
-  let globalIndex = 0;
-  segments.forEach((segment, segIdx) => {
-    const tokens = segment.text.match(/\S+\s*|\s+/g) || [];
-    tokens.forEach((token, _localIdx) => {
-      if (token.trim().length > 0) {
-        words.push({
-          text: token,
-          globalIndex,
-          segmentIndex: segIdx,
-          localIndex: _localIdx,
-          isSpoken: false,
-        });
-        globalIndex++;
-      }
-    });
-  });
-  return words;
-}
-
-function speakText(text: string) {
-  if (Platform.OS === 'web' && typeof window !== 'undefined' && window.speechSynthesis) {
-    const utterance = new SpeechSynthesisUtterance(text);
-    utterance.lang = 'en-US';
-    utterance.rate = 0.9;
-    window.speechSynthesis.speak(utterance);
-  }
+function speakerLabel(speaker: DialogueSegment['speaker']) {
+  return speaker === 'user' ? 'You' : 'AI';
 }
 
 export function TeleprompterDisplay({
-  segments,
-  currentWordIndex,
+  activeSegmentIndex = -1,
   corrections,
-  onWordLayout,
-  isGenerating,
+  currentWordIndex,
+  segments,
+  words,
 }: TeleprompterDisplayProps) {
-  const words = segmentToWords(segments);
-  const correctionMap = new Map(corrections.map((c) => [c.wordIndex, c]));
-  const [pressedTts, setPressedTts] = useState<number | null>(null);
-
-  const handleWordLayout = useCallback(
-    (index: number) => (event: LayoutChangeEvent) => {
-      const { y } = event.nativeEvent.layout;
-      onWordLayout(index, y);
-    },
-    [onWordLayout]
-  );
-
-  if (words.length === 0) {
-    return (
-      <ThemedView style={styles.empty}>
-        <ThemedText themeColor="textSecondary">🌱 No dialogue yet.</ThemedText>
-      </ThemedView>
-    );
-  }
-
-  const segmentWords: Word[][] = [];
-  segments.forEach((_, segIdx) => {
-    segmentWords.push(words.filter((w) => w.segmentIndex === segIdx));
-  });
+  const correctionIndexes = new Set(corrections.map((correction) => correction.wordIndex));
 
   return (
     <View style={styles.container}>
-      {segmentWords.map((segWords, segIdx) => {
-        const segment = segments[segIdx];
-        const isAi = segment.speaker === 'ai';
-        const palette = NookPalette[segIdx % NookPalette.length];
+      {segments.map((segment, segmentIndex) => {
+        const segmentWords = words.filter((word) => word.segmentIndex === segmentIndex);
+        const isActive = activeSegmentIndex === segmentIndex;
+        const hasActiveTarget =
+          activeSegmentIndex >= 0 &&
+          segmentWords.some((word) => word.wordIndex === currentWordIndex);
+        const isDimmed = activeSegmentIndex >= 0 && !isActive;
 
         return (
           <View
-            key={segment.id}
-            style={[styles.segmentRow, isAi ? styles.aiRow : styles.userRow]}
-          >
-            <View
+            key={`${segment.speaker}-${segmentIndex}-${segment.text}`}
+            style={[
+              styles.segmentRow,
+              segment.speaker === 'user' ? styles.userRow : styles.aiRow,
+            ]}>
+            <ThemedView
               style={[
-                styles.bubble,
-                isAi ? styles.aiBubble : styles.userBubble,
-                { backgroundColor: palette.bg },
-              ]}
-            >
-              <View style={styles.bubbleHeader}>
-                <ThemedText
-                  type="smallBold"
-                  style={[styles.speakerLabel, { color: palette.text }]}
-                >
-                  {isAi ? '🐻 AI' : '👤 You'}
-                </ThemedText>
-                {isAi && (
-                  <Pressable
-                    onPress={() => speakText(segment.text)}
-                    onPressIn={() => setPressedTts(segIdx)}
-                    onPressOut={() => setPressedTts(null)}
-                    hitSlop={8}
-                  >
-                    <ThemedText
-                      style={[
-                        styles.ttsButton,
-                        pressedTts === segIdx && styles.ttsButtonPressed,
-                      ]}
-                    >
-                      🔊
+                styles.segmentBubble,
+                {
+                  backgroundColor: NookPalette[segmentIndex % NookPalette.length],
+                },
+                isDimmed && styles.segmentBubbleDimmed,
+                isActive && styles.segmentBubbleActive,
+              ]}>
+              <View style={styles.segmentHeader}>
+                <ThemedText style={styles.speaker}>{speakerLabel(segment.speaker)}</ThemedText>
+                {isActive ? (
+                  <ThemedView style={styles.activeBadge}>
+                    <ThemedText style={styles.activeBadgeText}>
+                      {hasActiveTarget ? 'Live cue' : 'Up next'}
                     </ThemedText>
-                  </Pressable>
-                )}
+                  </ThemedView>
+                ) : null}
               </View>
-              <View style={styles.textRow}>
-                {segWords.map((word) => {
-                  const isSpoken = word.globalIndex <= currentWordIndex;
-                  const isCurrent = word.globalIndex === currentWordIndex;
-                  const correction = correctionMap.get(word.globalIndex);
+
+              <View style={styles.wordsRow}>
+                {segmentWords.map((word) => {
+                  const isSpoken = word.wordIndex < currentWordIndex;
+                  const isCurrent = word.wordIndex === currentWordIndex;
+                  const isCorrection = correctionIndexes.has(word.wordIndex);
 
                   return (
-                    <View
-                      key={word.globalIndex}
-                      onLayout={handleWordLayout(word.globalIndex)}
+                    <ThemedText
+                      key={`${segmentIndex}-${word.wordIndex}-${word.text}`}
                       style={[
-                        styles.wordWrap,
-                        isSpoken && styles.spokenWrap,
-                        isCurrent && styles.currentWrap,
-                        correction && styles.errorWrap,
-                      ]}
-                    >
-                      <ThemedText
-                        style={[
-                          styles.word,
-                          { color: palette.text },
-                          isSpoken && styles.spokenText,
-                          isCurrent && styles.currentText,
-                        ]}
-                      >
-                        {word.text}
-                      </ThemedText>
-                    </View>
+                        styles.word,
+                        isSpoken && styles.wordSpoken,
+                        isCurrent && styles.wordCurrent,
+                        isCorrection && styles.wordCorrection,
+                      ]}>
+                      {word.text}{' '}
+                    </ThemedText>
                   );
                 })}
               </View>
-            </View>
+            </ThemedView>
           </View>
         );
       })}
-
-      {isGenerating && (
-        <View style={styles.loadingRow}>
-          <View style={styles.loadingDots}>
-            <View style={[styles.loadingDot, styles.loadingDot1]} />
-            <View style={[styles.loadingDot, styles.loadingDot2]} />
-            <View style={[styles.loadingDot, styles.loadingDot3]} />
-          </View>
-          <ThemedText type="small" themeColor="textSecondary">
-            🌱 Growing next part...
-          </ThemedText>
-        </View>
-      )}
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    paddingHorizontal: Spacing.md,
-    paddingVertical: Spacing.lg,
-    gap: Spacing.md,
-  },
-  empty: {
-    padding: Spacing.xl,
+  activeBadge: {
     alignItems: 'center',
+    backgroundColor: 'rgba(25, 200, 185, 0.14)',
+    borderRadius: Radius.pill,
+    paddingHorizontal: Spacing.sm,
+    paddingVertical: 4,
   },
-  segmentRow: {
-    flexDirection: 'row',
-  },
-  aiRow: {
-    justifyContent: 'flex-start',
-  },
-  userRow: {
-    justifyContent: 'flex-end',
-  },
-  bubble: {
-    padding: Spacing.md,
-    borderRadius: Radius.lg,
-    maxWidth: '88%',
-    gap: Spacing.xs,
-    borderWidth: 2,
-    borderColor: 'rgba(0,0,0,0.08)',
-  },
-  aiBubble: {
-    borderBottomLeftRadius: Spacing.xs,
-  },
-  userBubble: {
-    borderBottomRightRadius: Spacing.xs,
-  },
-  bubbleHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
-  speakerLabel: {
-    opacity: 0.7,
-    letterSpacing: 0.02,
-  },
-  ttsButton: {
-    fontSize: 16,
-    opacity: 0.6,
-  },
-  ttsButtonPressed: {
-    opacity: 1,
-    transform: [{ scale: 1.2 }],
-  },
-  textRow: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 2,
-  },
-  wordWrap: {
-    paddingHorizontal: 2,
-    paddingVertical: 1,
-    borderRadius: 4,
-  },
-  word: {
-    fontSize: 18,
-    lineHeight: 28,
-    fontWeight: '600',
-  },
-  spokenWrap: {
-    backgroundColor: 'rgba(111, 186, 44, 0.25)',
-    borderRadius: 6,
-  },
-  spokenText: {
+  activeBadgeText: {
+    color: Colors.light.primary,
+    fontSize: 12,
     fontWeight: '800',
   },
-  currentWrap: {
-    backgroundColor: 'rgba(245, 195, 28, 0.45)',
-    borderRadius: 6,
-    transform: [{ scale: 1.05 }],
+  aiRow: {
+    alignItems: 'flex-start',
   },
-  currentText: {
-    fontWeight: '900',
-    fontSize: 20,
+  container: {
+    gap: Spacing.lg,
+    paddingBottom: Spacing.xl,
   },
-  errorWrap: {
-    borderBottomWidth: 2.5,
-    borderBottomColor: '#e05a5a',
-    borderRadius: 2,
+  segmentBubble: {
+    borderColor: 'rgba(121, 79, 39, 0.1)',
+    borderRadius: Radius.lg,
+    borderWidth: 1,
+    maxWidth: '92%',
+    minWidth: '62%',
+    paddingHorizontal: Spacing.lg,
+    paddingVertical: Spacing.md,
+    ...Shadows.card,
   },
-  loadingRow: {
-    alignItems: 'center',
-    paddingVertical: Spacing.xl,
-    gap: Spacing.sm,
-  },
-  loadingDots: {
-    flexDirection: 'row',
-    gap: 6,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  loadingDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    backgroundColor: '#19c8b9',
-  },
-  loadingDot1: {
-    opacity: 0.4,
-  },
-  loadingDot2: {
-    opacity: 0.7,
-  },
-  loadingDot3: {
+  segmentBubbleActive: {
+    borderColor: Colors.light.primary,
+    borderWidth: 2,
     opacity: 1,
+    transform: [{ translateY: -2 }],
+  },
+  segmentBubbleDimmed: {
+    opacity: 0.72,
+  },
+  segmentHeader: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginBottom: Spacing.sm,
+  },
+  segmentRow: {
+    width: '100%',
+  },
+  speaker: {
+    color: '#794f27',
+    fontSize: 12,
+    fontWeight: '800',
+    letterSpacing: 0.5,
+    textTransform: 'uppercase',
+  },
+  userRow: {
+    alignItems: 'flex-end',
+  },
+  word: {
+    color: Colors.light.text,
+    fontSize: 20,
+    fontWeight: '700',
+    lineHeight: 32,
+  },
+  wordCorrection: {
+    color: Colors.light.error,
+    textDecorationLine: 'underline',
+  },
+  wordCurrent: {
+    backgroundColor: 'rgba(255, 209, 102, 0.7)',
+    borderRadius: Radius.sm,
+    color: '#6a4a1f',
+    overflow: 'hidden',
+    paddingHorizontal: 2,
+  },
+  wordSpoken: {
+    color: Colors.light.spoken,
+  },
+  wordsRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
   },
 });
