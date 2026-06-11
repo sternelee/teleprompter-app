@@ -26,19 +26,21 @@ export default function SettingsScreen() {
 
         <ThemedView type="backgroundContent" style={styles.card}>
           <View style={styles.iconRow}>
-            <ThemedText style={styles.icon}>🔑</ThemedText>
-            <ThemedText type="smallBold" style={styles.cardTitle}>BigModel API Key</ThemedText>
+            <ThemedText style={styles.keyBadge}>KEY</ThemedText>
+            <ThemedText type="smallBold" style={styles.cardTitle}>DeepSeek API Key</ThemedText>
           </View>
           <ThemedText type="small" themeColor="textSecondary">
-            Your API key is stored only in memory and never sent to any server other than BigModel.
+            Your API key is stored only in memory and never sent to any server other than DeepSeek.
           </ThemedText>
           <TextInput
             style={styles.input}
-            placeholder="sk-..."
+            placeholder="Paste your DeepSeek API key"
             placeholderTextColor="#c4b89e"
             value={apiKey}
             onChangeText={setApiKey}
             autoCapitalize="none"
+            autoCorrect={false}
+            secureTextEntry
           />
         </ThemedView>
 
@@ -100,8 +102,14 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: Spacing.sm,
   },
-  icon: {
-    fontSize: 24,
+  keyBadge: {
+    backgroundColor: '#e6f9f6',
+    borderRadius: Radius.sm,
+    color: '#19c8b9',
+    fontSize: 12,
+    fontWeight: '900',
+    paddingHorizontal: Spacing.sm,
+    paddingVertical: 3,
   },
   cardTitle: {
     color: '#794f27',

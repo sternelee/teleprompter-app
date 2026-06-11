@@ -2,15 +2,7 @@
 
 ## Project Overview
 
-AI-powered English speaking practice app built with Expo SDK 56 and React Native. Users describe a real-life scene (e.g., "ordering coffee at Starbucks"), the app generates a dialogue via OpenAI GPT-4o, then acts as a teleprompter—listening to the user's speech, matching spoken words to the script in real time, highlighting progress, and offering correction tips for missed words.
-
-**Key features:**
-- Scene-to-dialogue generation via OpenAI API
-- Real-time speech recognition (`expo-speech-recognition`)
-- Fuzzy word matching with Levenshtein similarity
-- Auto-scrolling teleprompter with spoken/current/upcoming word states
-- Auto-continue: generates more dialogue when the user nears the end
-- Animal Crossing / NookPhone-inspired UI theme
+AI-powered English speaking practice app built with Expo SDK 56 and React Native. Users describe a real-life scene, the app generates a dialogue via DeepSeek (`deepseek-chat`), then acts as a teleprompter -- listening to the user's speech, matching spoken words to the script in real time, highlighting progress, and offering correction tips for missed words.
 
 **Platforms:** iOS, Android, Web (static output)
 
@@ -19,22 +11,22 @@ AI-powered English speaking practice app built with Expo SDK 56 and React Native
 ## Architecture & Data Flow
 
 ```
-┌─────────────┐     ┌─────────────────┐     ┌──────────────────┐
-│  index.tsx  │────▶│  openai.ts      │────▶│  OpenAI GPT-4o   │
-│ (scene input)│     │ (generateDialogue)│    │  JSON mode       │
-└─────────────┘     └─────────────────┘     └──────────────────┘
+┌─────────────┐     ┌─────────────────┐     ┌──────────────────────┐
+│  index.tsx  │────▶│  openai.ts      │────▶│      DeepSeek        │
+│ (scene input)│     │ (generateDialogue)│    │  (deepseek-chat)    │
+└─────────────┘     └─────────────────┘     └──────────────────────┘
         │                                              │
         │           DialogueSegment[]                  │
         ▼                                              │
-┌─────────────────────────────────────────────────────────────┐
-│                      AppContext                              │
+┌────────────────────────────────────────────────────────────┐
+│                      AppContext                             │
 │  { apiKey, scene, segments[], isGenerating, generationError }│
-└─────────────────────────────────────────────────────────────┘
+└────────────────────────────────────────────────────────────┘
         │
         ▼
 ┌─────────────────┐     ┌─────────────────────┐
-│ teleprompter.tsx │────▶│ useSpeechRecognition │
-│ (practice screen)│     │ (expo-speech-recogn) │
+│ teleprompter.tsx│────▶│ useSpeechRecognition│
+│ (practice screen)│     │ (expo-speech-recogn)│
 └─────────────────┘     └─────────────────────┘
         │                          │
         │ spoken text              │
@@ -53,13 +45,46 @@ AI-powered English speaking practice app built with Expo SDK 56 and React Native
 └─────────────────────┘
 ```
 
-**State management:** Single React Context (`src/contexts/app-context.tsx`). No external state library. All screen-level state lives in `AppContext`; local UI state (pressed states, inputs) uses `useState` in components.
+**State management:** Single React Context (`src/contexts/app-context.tsx`). No external state library. Global state lives in `AppContext`; local UI state uses `useState`.
 
-**Data flow patterns:**
+**Data flow:**
 - `index.tsx` captures scene → calls `generateDialogue()` → stores `segments` in context → navigates to `/teleprompter`
-- `teleprompter.tsx` reads `segments` from context, derives `Word[]` via `useMemo`, passes to `useWordMatcher`, feeds speech results into `updateProgress()`
-- `useWordMatcher` returns `currentWordIndex` and `corrections[]`, which drive rendering and auto-scroll
-- Auto-continue: when `totalWords - currentWordIndex <= 8`, `teleprompter.tsx` calls `generateDialogue(scene, apiKey, existingSegments)` and `appendSegments()`
+- `teleprompter.tsx` reads `segments` from context, derives `Word[]` via `useMemo`, passes to `useWordMatcher`
+- `useWordMatcher` returns `currentWordIndex` and `corrections[]`, driving rendering and auto-scroll
+- Auto-continue: when `totalWords - currentWordIndex <= 8`, calls `generateDialogue()` again and `appendSegments()`
+
+---
+
+## Development Commands
+
+```bash
+npm install          # Install dependencies
+npx expo start       # Start dev server
+npm run web          # Web dev server
+npm run ios          # iOS simulator
+npm run android      # Android emulator
+npm run lint         # ESLint (flat config, expo lint)
+npx eslint <file>    # Lint a single file
+npm run reset-project # DESTRUCTIVE: moves src/app to /example, creates blank app/
+```
+
+**No test runner is configured.** If added, use Expo's Jest guide.
+
+---
+
+## API: DeepSeek (NOT OpenAI)
+
+**Critical gotcha:** Despite the filename `src/services/openai.ts`, this codebase calls **DeepSeek**, not OpenAI.
+
+| Detail | Value |
+|---|---|
+| Endpoint | `https://api.deepseek.com/chat/completions` |
+| Model | `deepseek-chat` |
+| Auth | `Bearer {apiKey}` header |
+| Extra params | `response_format: { type: 'json_object' }` |
+| Response format | JSON mode response, parsed from `choices[0].message.content` |
+
+The `apiKey` is user-provided per session via the Settings screen, stored in AppContext (in-memory only, never committed).
 
 ---
 
@@ -67,77 +92,38 @@ AI-powered English speaking practice app built with Expo SDK 56 and React Native
 
 |Directory|Purpose|
 |---|---|
-|`src/app/`|Expo Router file-based routes. `_layout.tsx` = root Stack navigator. `index.tsx` = scene input. `teleprompter.tsx` = practice screen. `settings.tsx` = modal settings.|
-|`src/components/`|Reusable UI components. `themed-text.tsx`, `themed-view.tsx` = theme-aware wrappers. `teleprompter-display.tsx` = dialogue bubble renderer. `animated-icon.tsx` / `.web.tsx` = platform-split splash animation.|
-|`src/components/ui/`|Lower-level UI primitives (e.g., `collapsible.tsx`).|
-|`src/hooks/`|Custom hooks. `use-speech-recognition.ts` wraps `expo-speech-recognition`. `use-word-matcher.ts` implements fuzzy matching. `use-theme.ts` / `use-color-scheme.ts` = theme resolution.|
-|`src/contexts/`|React Context providers. `app-context.tsx` = single global state.|
-|`src/services/`|API layer. `openai.ts` = OpenAI chat completions client.|
-|`src/types/`|TypeScript interfaces. `dialogue.ts` = `DialogueSegment`, `Word`, `Correction`.|
-|`src/constants/`|Design tokens. `theme.ts` = Colors, Fonts, Spacing, Radius, Shadows, NookPalette.|
-|`assets/images/`|App icons, splash screen, tab bar icons, branding images.|
-|`scripts/`|Utility scripts. `reset-project.js` = moves starter code to `/example`, creates blank `app/`.|
+|`src/app/`|Expo Router file-based routes. `_layout.tsx` = root Stack navigator with 3 screens.|
+|`src/components/`|Reusable UI. `themed-text.tsx`, `themed-view.tsx` = theme wrappers. `teleprompter-display.tsx` = dialogue bubble renderer.|
+|`src/hooks/`|Custom hooks. `use-speech-recognition.ts`, `use-word-matcher.ts`, `use-theme.ts`|
+|`src/contexts/`|`app-context.tsx` = single global state provider|
+|`src/services/`|`openai.ts` = DeepSeek client (legacy filename!)|
+|`src/types/`|`dialogue.ts` = `DialogueSegment`, `Word`, `Correction`|
+|`src/constants/`|`theme.ts` = Colors, Fonts, Spacing, Radius, Shadows, NookPalette|
 
 ---
 
-## Development Commands
-
-```bash
-# Install dependencies
-npm install
-
-# Start dev server (Expo CLI)
-npm start          # or: npx expo start
-
-# Platform-specific
-npm run ios        # iOS simulator
-npm run android    # Android emulator
-npm run web        # Web dev server
-
-# Linting
-npm run lint       # ESLint via expo lint
-
-# Reset project (moves src/scripts to example, creates fresh app/)
-npm run reset-project
-```
-
-No test runner is configured. To add tests, follow Expo's Jest guide.
-
----
-
-## Code Conventions & Common Patterns
+## Code Conventions
 
 ### File Organization
-- **File-based routing:** `src/app/*.tsx` maps directly to routes (`/`, `/teleprompter`, `/settings`)
-- **Platform splitting:** Use `.web.tsx` suffix for web-specific component variants (e.g., `animated-icon.tsx` vs `animated-icon.web.tsx`)
+- **File-based routing:** `src/app/*.tsx` → routes (`/`, `/teleprompter`, `/settings`)
+- **Platform splitting:** `.web.tsx` suffix for web-specific variants (e.g., `animated-icon.web.tsx`, `use-color-scheme.web.ts`)
 - **Path aliases:** `@/*` → `./src/*`, `@/assets/*` → `./assets/*`
 
 ### Naming
 - Components: PascalCase (`TeleprompterDisplay`, `ThemedText`)
-- Hooks: camelCase prefixed with `use` (`useWordMatcher`, `useSpeechRecognition`)
-- Services: camelCase functions (`generateDialogue`, `buildPrompt`)
+- Hooks: camelCase prefixed with `use`
 - Types/Interfaces: PascalCase (`DialogueSegment`, `Correction`)
-- Constants: PascalCase (`Colors`, `Spacing`, `NookPalette`)
+- Constants: PascalCase (`Colors`, `Spacing`)
 
-### Theming
-- All visual components use `ThemedText` and `ThemedView` wrappers instead of raw `Text`/`View`
-- Colors, spacing, radius, and shadows imported from `src/constants/theme.ts`
-- Light/dark themes defined in `Colors.light` / `Colors.dark`
-- `useTheme()` returns the active color set based on `useColorScheme()`
-- Animal Crossing aesthetic: warm browns, mint teal primary (`#19c8b9`), 3D button shadows, rounded corners
-
-### State Management
-- Global state: single `AppContext` with `useState` + `useCallback` setters
-- Local UI state: `useState` in components (e.g., `buttonPressed`, `inputScene`)
-- Refs for mutable values that shouldn't trigger re-renders: `accumulatedRef`, `lastIndexRef`, `fetchingRef`
-
-### Async Patterns
-- `generateDialogue()` is a plain `async` function with `fetch()`
-- Error handling: try/catch in screen components, errors stored in `generationError` context field
-- Speech recognition events handled via `useSpeechRecognitionEvent` callbacks from `expo-speech-recognition`
+### Theming (Animal Crossing / NookPhone style)
+- **Always use `ThemedText` and `ThemedView`** instead of raw `Text`/`View`
+- Design tokens in `src/constants/theme.ts`: Colors (light/dark), Spacing, Radius, Shadows
+- Primary color: `#19c8b9` (mint teal). Warm browns (`#794f27`), cream backgrounds (`#f8f8f0`)
+- `NookPalette`: 12 pastel colors for dialogue bubble backgrounds
+- `MaxContentWidth = 800`
+- Prefer theme tokens for colors; avoid inline hex values for new code
 
 ### Pressable Button Pattern
-All buttons use `Pressable` with `onPressIn`/`onPressOut` toggling a `pressed` state, applied to `ThemedView` style arrays for 3D press effect:
 ```tsx
 <Pressable onPressIn={() => setPressed(true)} onPressOut={() => setPressed(false)}>
   <ThemedView style={[styles.button, pressed && styles.buttonActive]}>
@@ -145,13 +131,24 @@ All buttons use `Pressable` with `onPressIn`/`onPressOut` toggling a `pressed` s
   </ThemedView>
 </Pressable>
 ```
-Active state uses `transform: [{ translateY: 2 }]` + `Shadows.btnActive` for a pressed-down look.
+Active state: `transform: [{ translateY: 2 }]` + `Shadows.btnActive`.
 
 ### Styling
 - `StyleSheet.create()` for all component styles
-- `Spacing`, `Radius`, `Shadows` tokens used consistently
-- `MaxContentWidth = 800` caps content width on large screens
-- Inline colors occasionally hardcoded in styles (e.g., `#794f27`, `#c4b89e`)—prefer theme tokens for new code
+- Use `Spacing`, `Radius`, `Shadows` tokens consistently
+
+### State Management
+- Single `AppContext` with `useState` + `useCallback` setters. Avoid external state libraries.
+- Refs for mutable values that shouldn't trigger re-renders
+
+### Speech Recognition
+- 250ms auto-restart delay on `end` event for continuous listening
+- `interimResults: true`, `continuous: true`, `lang: 'en-US'`
+
+### Word Matching
+- Levenshtein similarity with threshold `0.6`, lookahead `20`, backtrack `3`
+- `useWordMatcher` returns `currentWordIndex` and `corrections[]`
+- Reuse this hook -- do not write new string-matching logic
 
 ---
 
@@ -159,51 +156,32 @@ Active state uses `transform: [{ translateY: 2 }]` + `Shadows.btnActive` for a p
 
 |File|Role|
 |---|---|
-|`src/app/_layout.tsx`|Root layout: ThemeProvider, AppProvider, Stack navigator with 3 screens|
-|`src/app/index.tsx`|Entry screen: scene input, API key configuration, dialogue generation trigger|
-|`src/app/teleprompter.tsx`|Main practice screen: speech recognition, word matching, auto-scroll, auto-continue|
-|`src/app/settings.tsx`|Modal settings screen: API key input with `secureTextEntry`|
+|`src/app/_layout.tsx`|Root: ThemeProvider, AppProvider, Stack navigator with 3 screens|
+|`src/app/index.tsx`|Scene input, API key config, dialogue generation trigger|
+|`src/app/teleprompter.tsx`|Practice screen: speech recognition, word matching, auto-scroll|
+|`src/app/settings.tsx`|Modal settings: API key input with `secureTextEntry`|
 |`src/contexts/app-context.tsx`|Global state: apiKey, scene, segments, generation flags|
-|`src/services/openai.ts`|OpenAI client: `generateDialogue(scene, apiKey, previousSegments?)` → `DialogueSegment[]`|
-|`src/hooks/use-word-matcher.ts`|Fuzzy word matching: Levenshtein similarity, lookahead=20, backtrack=3, threshold=0.6|
-|`src/hooks/use-speech-recognition.ts`|Wraps `expo-speech-recognition`: permission request, event handling, auto-restart on `end`|
-|`src/components/teleprompter-display.tsx`|Renders dialogue as colored speech bubbles with spoken/current/error word states|
+|`src/services/openai.ts`|**DeepSeek client** (legacy filename): `generateDialogue(scene, apiKey, previousSegments?)`|
+|`src/hooks/use-word-matcher.ts`|Fuzzy matching: Levenshtein, lookahead=20, backtrack=3, threshold=0.6|
+|`src/hooks/use-speech-recognition.ts`|Wraps `expo-speech-recognition`: permissions, events, auto-restart|
+|`src/components/teleprompter-display.tsx`|Dialogue bubbles with spoken/current/error word states|
 |`src/constants/theme.ts`|Design tokens: Colors, Fonts, Spacing, Radius, Shadows, NookPalette|
-|`package.json`|Scripts, dependencies, entry point: `expo-router/entry`|
-|`app.json`|Expo manifest: scheme `teleprompterapp`, plugins, experiments (`typedRoutes`, `reactCompiler`)|
-|`tsconfig.json`|Extends `expo/tsconfig.base`, strict mode, path aliases|
-|`eslint.config.js`|Flat config using `eslint-config-expo`|
 
 ---
 
-## Runtime/Tooling Preferences
+## Runtime
 
-|||
-|---|---|
-|**Framework**|Expo SDK 56 (~56.0.5)|
-|**React Native**|0.85.3|
-|**React**|19.2.3|
-|**Package manager**|npm (lockfile present)|
-|**TypeScript**|~6.0.3, strict mode enabled|
-|**Linting**|ESLint 9 with flat config (`eslint-config-expo`)|
-|**Router**|expo-router (~56.2.7), file-based routing|
-|**Animation**|react-native-reanimated (4.3.1), react-native-worklets (0.8.3)|
-|**Speech**|expo-speech-recognition (^56.0.0)|
-|**Web font**|Nunito (loaded via `expo-font`, declared in `src/global.css`)|
-
-**Expo experiments enabled:**
-- `typedRoutes: true` — generates typed route definitions
-- `reactCompiler: true` — experimental React Compiler
-
-**No custom build tooling** (no Babel, Metro, Webpack, or Tailwind configs). Relies on Expo's managed workflow.
-
-**Critical doc reference:** Before writing any Expo-specific code, consult the exact versioned docs at `https://docs.expo.dev/versions/v56.0.0/`.
+- **Framework:** Expo SDK 56 managed workflow (no custom build tooling)
+- **React Native:** 0.85.3, **React:** 19.2.3, **TypeScript:** ~6.0.3 (strict mode)
+- **Router:** expo-router (file-based), `typedRoutes: true` experiment enabled
+- **React Compiler:** experimental (`reactCompiler: true` in app.json)
+- **Font:** Nunito (Google Fonts CDN in `src/global.css`)
+- **VSCode:** `fixAll`, `organizeImports`, `sortMembers` enabled on save
+- **Expo docs:** `https://docs.expo.dev/versions/v56.0.0/`
 
 ---
 
-## Testing & QA
+## Related Files
 
-- **No test runner is currently configured.**
-- To add tests, follow Expo's Jest setup guide.
-- Linting is available via `npm run lint` (ESLint flat config).
-- Manual QA workflow: run `npm run web` or `npm run ios`, enter a scene, verify dialogue generation, start speech recognition, speak words, confirm highlighting and auto-scroll.
+- `CLAUDE.md` — references this file (`@AGENTS.md`)
+- `.github/copilot-instructions.md` — Copilot-specific guidance

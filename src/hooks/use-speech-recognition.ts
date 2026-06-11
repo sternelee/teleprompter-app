@@ -7,6 +7,10 @@ type UseSpeechRecognitionOptions = {
   onResult: (transcript: string) => void;
 };
 
+type SpeechPermissionResponse = {
+  granted?: boolean;
+};
+
 function formatErrorMessage(error: unknown) {
   if (error instanceof Error) {
     return error.message;
@@ -20,7 +24,8 @@ export function useSpeechRecognition({
   onError,
   onResult,
 }: UseSpeechRecognitionOptions) {
-  const [permissionResponse, requestPermission] = ExpoSpeechRecognitionModule.usePermissions();
+  const [permissionResponse, setPermissionResponse] =
+    useState<SpeechPermissionResponse | null>(null);
   const [isListening, setIsListening] = useState(false);
   const shouldAutoRestartRef = useRef(false);
   const restartTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -41,6 +46,12 @@ export function useSpeechRecognition({
     },
     [clearRestartTimer, onError]
   );
+
+  const requestPermission = useCallback(async () => {
+    const permission = await ExpoSpeechRecognitionModule.requestPermissionsAsync();
+    setPermissionResponse(permission);
+    return permission;
+  }, []);
 
   const startListening = useCallback(async () => {
     const granted =
@@ -112,6 +123,12 @@ export function useSpeechRecognition({
   });
 
   useEffect(() => {
+    void ExpoSpeechRecognitionModule.getPermissionsAsync()
+      .then(setPermissionResponse)
+      .catch(() => {
+        setPermissionResponse(null);
+      });
+
     return () => {
       shouldAutoRestartRef.current = false;
       clearRestartTimer();

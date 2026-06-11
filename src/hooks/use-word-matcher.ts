@@ -1,5 +1,5 @@
-import { useState, useCallback, useRef } from 'react';
-import { Word, Correction } from '@/types/dialogue';
+import { useState, useCallback, useRef } from "react";
+import { Word, Correction } from "@/types/dialogue";
 
 function levenshtein(a: string, b: string): number {
   const m = a.length;
@@ -7,21 +7,27 @@ function levenshtein(a: string, b: string): number {
   if (m === 0) return n;
   if (n === 0) return m;
 
-  const dp: number[][] = Array.from({ length: m + 1 }, () => new Array(n + 1).fill(0));
+  const dp: number[][] = Array.from({ length: m + 1 }, () =>
+    new Array(n + 1).fill(0),
+  );
   for (let i = 0; i <= m; i++) dp[i][0] = i;
   for (let j = 0; j <= n; j++) dp[0][j] = j;
 
   for (let i = 1; i <= m; i++) {
     for (let j = 1; j <= n; j++) {
       const cost = a[i - 1] === b[j - 1] ? 0 : 1;
-      dp[i][j] = Math.min(dp[i - 1][j] + 1, dp[i][j - 1] + 1, dp[i - 1][j - 1] + cost);
+      dp[i][j] = Math.min(
+        dp[i - 1][j] + 1,
+        dp[i][j - 1] + 1,
+        dp[i - 1][j - 1] + cost,
+      );
     }
   }
   return dp[m][n];
 }
 
-function normalizeWord(word: string): string {
-  return word.toLowerCase().replace(/[.,!?;:"'()\[\]{}]/g, '');
+export function normalizeWord(word: string): string {
+  return word.toLowerCase().replace(/[.,!?;:"'()\[\]{}]/g, "");
 }
 
 function wordSimilarity(a: string, b: string): number {
@@ -45,6 +51,7 @@ const BACKTRACK = 3;
 interface UseWordMatcherResult {
   currentWordIndex: number;
   corrections: Correction[];
+  jumpToWord: (wordIndex: number) => void;
   updateProgress: (spokenText: string) => void;
   resetProgress: () => void;
 }
@@ -52,8 +59,8 @@ interface UseWordMatcherResult {
 export function useWordMatcher(words: Word[]): UseWordMatcherResult {
   const [currentWordIndex, setCurrentWordIndex] = useState(-1);
   const [corrections, setCorrections] = useState<Correction[]>([]);
-  const lastIndexRef = useRef(-1);
-  const lastSpokenRef = useRef('');
+  const lastMatchedPositionRef = useRef(-1);
+  const lastSpokenRef = useRef("");
 
   const updateProgress = useCallback(
     (spokenText: string) => {
@@ -64,10 +71,16 @@ export function useWordMatcher(words: Word[]): UseWordMatcherResult {
       const spokenWords = tokenize(spokenText);
       if (spokenWords.length === 0) return;
 
-      const searchStart = Math.max(0, lastIndexRef.current - BACKTRACK);
-      const searchEnd = Math.min(words.length, lastIndexRef.current + LOOKAHEAD + spokenWords.length);
+      const searchStart = Math.max(
+        0,
+        lastMatchedPositionRef.current - BACKTRACK,
+      );
+      const searchEnd = Math.min(
+        words.length,
+        lastMatchedPositionRef.current + LOOKAHEAD + spokenWords.length,
+      );
 
-      let bestIndex = lastIndexRef.current;
+      let bestPosition = lastMatchedPositionRef.current;
       let bestScore = 0;
 
       for (let i = searchStart; i < searchEnd; i++) {
@@ -88,14 +101,18 @@ export function useWordMatcher(words: Word[]): UseWordMatcherResult {
 
         if (score > bestScore) {
           bestScore = score;
-          bestIndex = i + matchedCount - 1;
+          bestPosition = i + matchedCount - 1;
         }
       }
 
-      if (bestIndex > lastIndexRef.current) {
+      if (bestPosition > lastMatchedPositionRef.current) {
         // Detect errors in skipped words
         const newCorrections: Correction[] = [];
-        for (let k = lastIndexRef.current + 1; k <= bestIndex; k++) {
+        for (
+          let k = lastMatchedPositionRef.current + 1;
+          k <= bestPosition;
+          k++
+        ) {
           if (k >= 0 && k < words.length) {
             const expected = normalizeWord(words[k].text);
             if (expected.length < 2) continue;
@@ -109,9 +126,9 @@ export function useWordMatcher(words: Word[]): UseWordMatcherResult {
             }
             if (!found) {
               newCorrections.push({
-                wordIndex: k,
+                wordIndex: words[k].globalIndex,
                 expected: words[k].text,
-                actual: '(missed)',
+                actual: "(missed)",
                 timestamp: Date.now(),
               });
             }
@@ -122,19 +139,54 @@ export function useWordMatcher(words: Word[]): UseWordMatcherResult {
           setCorrections((prev) => [...prev, ...newCorrections]);
         }
 
-        lastIndexRef.current = bestIndex;
-        setCurrentWordIndex(bestIndex);
+        lastMatchedPositionRef.current = bestPosition;
+        setCurrentWordIndex(words[bestPosition].globalIndex);
       }
     },
-    [words]
+    [words],
   );
 
   const resetProgress = useCallback(() => {
     setCurrentWordIndex(-1);
     setCorrections([]);
-    lastIndexRef.current = -1;
-    lastSpokenRef.current = '';
+    lastMatchedPositionRef.current = -1;
+    lastSpokenRef.current = "";
   }, []);
 
-  return { currentWordIndex, corrections, updateProgress, resetProgress };
+  const jumpToWord = useCallback(
+    (wordIndex: number) => {
+      if (words.length === 0) {
+        return;
+      }
+
+      const exactPosition = words.findIndex(
+        (word) => word.globalIndex === wordIndex,
+      );
+      const nextPosition =
+        exactPosition >= 0
+          ? exactPosition
+          : words.findIndex((word) => word.globalIndex > wordIndex);
+      const clampedPosition =
+        nextPosition >= 0 ? nextPosition : Math.max(0, words.length - 1);
+      const nextWord = words[clampedPosition];
+
+      lastMatchedPositionRef.current = clampedPosition;
+      lastSpokenRef.current = "";
+      setCurrentWordIndex(nextWord.globalIndex);
+      setCorrections((prev) =>
+        prev.filter(
+          (correction) => correction.wordIndex <= nextWord.globalIndex,
+        ),
+      );
+    },
+    [words],
+  );
+
+  return {
+    currentWordIndex,
+    corrections,
+    jumpToWord,
+    updateProgress,
+    resetProgress,
+  };
 }
