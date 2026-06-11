@@ -2,6 +2,7 @@ import { useRouter } from "expo-router";
 import * as WebBrowser from "expo-web-browser";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Pressable, ScrollView, StyleSheet, View } from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
 
 import { TeleprompterDisplay } from "@/components/teleprompter-display";
 import { ThemedText } from "@/components/themed-text";
@@ -565,243 +566,257 @@ export default function TeleprompterScreen() {
 
   return (
     <ThemedView style={styles.container}>
-      <View style={styles.header}>
-        <Pressable onPress={handleBack} hitSlop={8}>
-          <ThemedText style={styles.backButton}>← Back</ThemedText>
-        </Pressable>
-        <ThemedText style={styles.title}>Teleprompter Practice</ThemedText>
-      </View>
-
-      <View style={styles.content}>
-        <View style={styles.progressBar}>
-          <View
-            style={[styles.progressFill, { width: `${progressPercent}%` }]}
-          />
+      <SafeAreaView style={styles.safeArea}>
+        <View style={styles.header}>
+          <Pressable onPress={handleBack} hitSlop={8}>
+            <ThemedText style={styles.backButton}>← Back</ThemedText>
+          </Pressable>
+          <ThemedText style={styles.title}>Teleprompter Practice</ThemedText>
         </View>
 
-        <ThemedView type="backgroundContent" style={styles.coachPanel}>
-          <Pressable
-            onPress={() => setIsCoachPanelExpanded((value) => !value)}
-            style={styles.coachSummary}
-            hitSlop={6}
-          >
-            <View style={styles.coachSummaryMain}>
-              <View
-                style={[
-                  styles.statusPill,
-                  { backgroundColor: statusMeta.backgroundColor },
-                ]}
-              >
+        <View style={styles.content}>
+          <View style={styles.progressBar}>
+            <View
+              style={[styles.progressFill, { width: `${progressPercent}%` }]}
+            />
+          </View>
+
+          <ThemedView type="backgroundContent" style={styles.coachPanel}>
+            <Pressable
+              hitSlop={6}
+              onPress={() => setIsCoachPanelExpanded((value) => !value)}
+              style={styles.coachSummary}
+            >
+              <View style={styles.coachSummaryMain}>
                 <View
                   style={[
-                    styles.statusDot,
-                    {
-                      backgroundColor: statusMeta.color,
-                      opacity: isReading ? (blinkVisible ? 1 : 0.45) : 1,
-                    },
+                    styles.statusPill,
+                    { backgroundColor: statusMeta.backgroundColor },
                   ]}
-                />
-                <ThemedText type="smallBold" style={styles.statusText}>
-                  {statusMeta.label}
+                >
+                  <View
+                    style={[
+                      styles.statusDot,
+                      {
+                        backgroundColor: statusMeta.color,
+                        opacity: isReading ? (blinkVisible ? 1 : 0.45) : 1,
+                      },
+                    ]}
+                  />
+                  <ThemedText type="smallBold" style={styles.statusText}>
+                    {statusMeta.label}
+                  </ThemedText>
+                </View>
+                <ThemedText
+                  type="small"
+                  style={styles.statusDetail}
+                  numberOfLines={1}
+                >
+                  {statusDetailText}
                 </ThemedText>
               </View>
-              <ThemedText
-                type="small"
-                style={styles.statusDetail}
-                numberOfLines={1}
-              >
-                {statusDetailText}
-              </ThemedText>
-            </View>
 
-            <View style={styles.coachSummaryMeta}>
-              <ThemedText style={styles.progressSummary}>
-                {progressSummary}
-              </ThemedText>
-              <ThemedText style={styles.expandLabel}>
-                {isCoachPanelExpanded ? "Hide" : "Details"}
-              </ThemedText>
-            </View>
-          </Pressable>
-
-          {isCoachPanelExpanded ? (
-            <>
-              <View style={styles.sceneSummary}>
-                <ThemedText type="smallBold" style={styles.sceneLabel}>
-                  Scene
+              <View style={styles.coachSummaryMeta}>
+                <ThemedText style={styles.progressSummary}>
+                  {progressSummary}
                 </ThemedText>
-                <ThemedText style={styles.sceneText}>{scene}</ThemedText>
+                <ThemedText style={styles.expandLabel}>
+                  {isCoachPanelExpanded ? "Hide" : "Details"}
+                </ThemedText>
               </View>
+            </Pressable>
 
-              <View style={styles.metricRow}>
-                <ThemedView type="backgroundElement" style={styles.metricCard}>
-                  <ThemedText type="small" style={styles.metricLabel}>
-                    Practiced
+            {isCoachPanelExpanded ? (
+              <>
+                <View style={styles.sceneSummary}>
+                  <ThemedText type="smallBold" style={styles.sceneLabel}>
+                    Scene
                   </ThemedText>
-                  <ThemedText type="title" style={styles.metricValue}>
-                    {spokenCount}
-                  </ThemedText>
-                </ThemedView>
-                <ThemedView type="backgroundElement" style={styles.metricCard}>
-                  <ThemedText type="small" style={styles.metricLabel}>
-                    Left
-                  </ThemedText>
-                  <ThemedText type="title" style={styles.metricValue}>
-                    {remainingWords}
-                  </ThemedText>
-                </ThemedView>
-                <ThemedView type="backgroundElement" style={styles.metricCard}>
-                  <ThemedText type="small" style={styles.metricLabel}>
-                    Revisit
-                  </ThemedText>
-                  <ThemedText type="title" style={styles.metricValue}>
-                    {corrections.length}
-                  </ThemedText>
-                </ThemedView>
-              </View>
+                  <ThemedText style={styles.sceneText}>{scene}</ThemedText>
+                </View>
 
-              <View style={styles.cueStack}>
-                <ThemedView type="backgroundElement" style={styles.cueCard}>
-                  <ThemedText type="small" style={styles.cueLabel}>
-                    Current focus · {currentCue.label}
-                  </ThemedText>
-                  <ThemedText style={styles.cueText}>
-                    {currentCue.text}
-                  </ThemedText>
-                </ThemedView>
-                <ThemedView type="backgroundElement" style={styles.cueCard}>
-                  <ThemedText type="small" style={styles.cueLabel}>
-                    Coming up · {nextCue.label}
-                  </ThemedText>
-                  <ThemedText style={styles.cueText}>
-                    {nextCue.text}
-                  </ThemedText>
-                </ThemedView>
-              </View>
+                <View style={styles.metricRow}>
+                  <ThemedView
+                    type="backgroundElement"
+                    style={styles.metricCard}
+                  >
+                    <ThemedText type="small" style={styles.metricLabel}>
+                      Practiced
+                    </ThemedText>
+                    <ThemedText type="title" style={styles.metricValue}>
+                      {spokenCount}
+                    </ThemedText>
+                  </ThemedView>
+                  <ThemedView
+                    type="backgroundElement"
+                    style={styles.metricCard}
+                  >
+                    <ThemedText type="small" style={styles.metricLabel}>
+                      Left
+                    </ThemedText>
+                    <ThemedText type="title" style={styles.metricValue}>
+                      {remainingWords}
+                    </ThemedText>
+                  </ThemedView>
+                  <ThemedView
+                    type="backgroundElement"
+                    style={styles.metricCard}
+                  >
+                    <ThemedText type="small" style={styles.metricLabel}>
+                      Revisit
+                    </ThemedText>
+                    <ThemedText type="title" style={styles.metricValue}>
+                      {corrections.length}
+                    </ThemedText>
+                  </ThemedView>
+                </View>
 
+                <View style={styles.cueStack}>
+                  <ThemedView type="backgroundElement" style={styles.cueCard}>
+                    <ThemedText type="small" style={styles.cueLabel}>
+                      Current focus · {currentCue.label}
+                    </ThemedText>
+                    <ThemedText style={styles.cueText}>
+                      {currentCue.text}
+                    </ThemedText>
+                  </ThemedView>
+                  <ThemedView type="backgroundElement" style={styles.cueCard}>
+                    <ThemedText type="small" style={styles.cueLabel}>
+                      Coming up · {nextCue.label}
+                    </ThemedText>
+                    <ThemedText style={styles.cueText}>
+                      {nextCue.text}
+                    </ThemedText>
+                  </ThemedView>
+                </View>
+
+                <ThemedView
+                  type="backgroundElement"
+                  style={styles.interactionHintCard}
+                >
+                  <ThemedText
+                    type="smallBold"
+                    style={styles.interactionHintTitle}
+                  >
+                    Word actions
+                  </ThemedText>
+                  <ThemedText type="small" style={styles.interactionHintText}>
+                    {interactionHint}
+                  </ThemedText>
+                </ThemedView>
+              </>
+            ) : null}
+          </ThemedView>
+
+          <ScrollView
+            ref={scrollViewRef}
+            style={styles.teleprompterContainer}
+            contentContainerStyle={styles.teleprompterContent}
+            onContentSizeChange={(_, height) => setContentHeight(height)}
+            onLayout={(event) =>
+              setViewportHeight(event.nativeEvent.layout.height)
+            }
+          >
+            <TeleprompterDisplay
+              activeSegmentIndex={activeSegmentIndex}
+              corrections={corrections}
+              currentWordIndex={displayCurrentWordIndex}
+              onSegmentLayout={handleSegmentLayout}
+              onWordLongPress={handleWordLongPress}
+              onWordPress={handleWordPress}
+              segments={segments}
+              spokenThroughWordIndex={currentWordIndex}
+              words={allWords}
+            />
+          </ScrollView>
+
+          {generationError || autoContinueError ? (
+            <ThemedText style={styles.errorText}>
+              {generationError ?? autoContinueError}
+            </ThemedText>
+          ) : null}
+
+          <View style={styles.controls}>
+            <Pressable
+              onPress={handleToggleReading}
+              onPressIn={() => setBtnPressed(true)}
+              onPressOut={() => setBtnPressed(false)}
+            >
               <ThemedView
-                type="backgroundElement"
-                style={styles.interactionHintCard}
+                type={isReading ? "error" : "primary"}
+                style={[
+                  styles.controlButton,
+                  btnPressed && styles.controlButtonActive,
+                ]}
               >
                 <ThemedText
-                  type="smallBold"
-                  style={styles.interactionHintTitle}
+                  type="default"
+                  weight="700"
+                  style={styles.controlButtonText}
                 >
-                  Word actions
-                </ThemedText>
-                <ThemedText type="small" style={styles.interactionHintText}>
-                  {interactionHint}
+                  {primaryActionLabel}
                 </ThemedText>
               </ThemedView>
-            </>
-          ) : null}
-        </ThemedView>
+            </Pressable>
 
-        <ScrollView
-          ref={scrollViewRef}
-          style={styles.teleprompterContainer}
-          contentContainerStyle={styles.teleprompterContent}
-          onContentSizeChange={(_, height) => setContentHeight(height)}
-          onLayout={(event) =>
-            setViewportHeight(event.nativeEvent.layout.height)
-          }
-        >
-          <TeleprompterDisplay
-            activeSegmentIndex={activeSegmentIndex}
-            corrections={corrections}
-            currentWordIndex={displayCurrentWordIndex}
-            onSegmentLayout={handleSegmentLayout}
-            onWordLongPress={handleWordLongPress}
-            onWordPress={handleWordPress}
-            segments={segments}
-            spokenThroughWordIndex={currentWordIndex}
-            words={allWords}
-          />
-        </ScrollView>
-
-        {generationError || autoContinueError ? (
-          <ThemedText style={styles.errorText}>
-            {generationError ?? autoContinueError}
-          </ThemedText>
-        ) : null}
-
-        <View style={styles.controls}>
-          <Pressable
-            onPress={handleToggleReading}
-            onPressIn={() => setBtnPressed(true)}
-            onPressOut={() => setBtnPressed(false)}
-          >
-            <ThemedView
-              type={isReading ? "error" : "primary"}
-              style={[
-                styles.controlButton,
-                btnPressed && styles.controlButtonActive,
-              ]}
+            <Pressable
+              onPress={handleRestart}
+              onPressIn={() => setResetPressed(true)}
+              onPressOut={() => setResetPressed(false)}
             >
-              <ThemedText
-                type="default"
-                weight="700"
-                style={styles.controlButtonText}
+              <ThemedView
+                type="backgroundElement"
+                style={[
+                  styles.secondaryButton,
+                  resetPressed && styles.secondaryButtonActive,
+                ]}
               >
-                {primaryActionLabel}
-              </ThemedText>
-            </ThemedView>
-          </Pressable>
-
-          <Pressable
-            onPress={handleRestart}
-            onPressIn={() => setResetPressed(true)}
-            onPressOut={() => setResetPressed(false)}
-          >
-            <ThemedView
-              type="backgroundElement"
-              style={[
-                styles.secondaryButton,
-                resetPressed && styles.secondaryButtonActive,
-              ]}
-            >
-              <ThemedText
-                type="default"
-                weight="700"
-                style={styles.secondaryButtonText}
-              >
-                Restart
-              </ThemedText>
-            </ThemedView>
-          </Pressable>
-        </View>
-
-        {corrections.length > 0 ? (
-          <ThemedView type="backgroundContent" style={styles.correctionsBox}>
-            <ThemedText type="smallBold" style={styles.correctionsTitle}>
-              Words to revisit
-            </ThemedText>
-            {corrections.slice(-3).map((correction, index) => (
-              <ThemedText
-                key={index}
-                type="small"
-                style={styles.correctionText}
-              >
-                Practice:{" "}
-                <ThemedText type="default" weight="700">
-                  {correction.expected}
+                <ThemedText
+                  type="default"
+                  weight="700"
+                  style={styles.secondaryButtonText}
+                >
+                  Restart
                 </ThemedText>
+              </ThemedView>
+            </Pressable>
+          </View>
+
+          {corrections.length > 0 ? (
+            <ThemedView type="backgroundContent" style={styles.correctionsBox}>
+              <ThemedText type="smallBold" style={styles.correctionsTitle}>
+                Words to revisit
               </ThemedText>
-            ))}
-          </ThemedView>
-        ) : null}
-      </View>
+              {corrections.slice(-3).map((correction, index) => (
+                <ThemedText
+                  key={index}
+                  type="small"
+                  style={styles.correctionText}
+                >
+                  Practice:{" "}
+                  <ThemedText type="default" weight="700">
+                    {correction.expected}
+                  </ThemedText>
+                </ThemedText>
+              ))}
+            </ThemedView>
+          ) : null}
+        </View>
+      </SafeAreaView>
     </ThemedView>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
+    backgroundColor: "#f6f3e8",
     flex: 1,
+  },
+  safeArea: {
+    flex: 1,
+    paddingBottom: Spacing.xl,
     paddingHorizontal: Spacing.lg,
     paddingTop: Spacing.lg,
-    paddingBottom: Spacing.xl,
-    backgroundColor: "#f6f3e8",
   },
   header: {
     flexDirection: "row",

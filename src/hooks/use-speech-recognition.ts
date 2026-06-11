@@ -59,7 +59,9 @@ export function useSpeechRecognition({
 
   const startListening = useCallback(async () => {
     const granted =
-      permissionResponse?.granted ?? (await requestPermission()).granted;
+      permissionResponse?.granted === true
+        ? true
+        : (await requestPermission()).granted;
 
     if (!granted) {
       emitError("Microphone permission is required to practice speaking.");
