@@ -69,14 +69,14 @@ export function TeleprompterDisplay({
         const segmentWords = words.filter(
           (word) => word.segmentIndex === segmentIndex,
         );
-        const isPracticeSegment = segment.speaker === "user";
+        const isUserSegment = segment.speaker === "user";
         const isActive = activeSegmentIndex === segmentIndex;
         const hasActiveTarget =
           activeSegmentIndex >= 0 &&
           segmentWords.some((word) => word.globalIndex === currentWordIndex);
         const isDimmed = activeSegmentIndex >= 0 && !isActive;
         const palette = NookPalette[segmentIndex % NookPalette.length];
-        const bubbleTextColor = isPracticeSegment
+        const bubbleTextColor = isUserSegment
           ? palette.text
           : Colors.light.text;
 
@@ -94,7 +94,7 @@ export function TeleprompterDisplay({
             <ThemedView
               style={[
                 styles.segmentBubble,
-                isPracticeSegment
+                isUserSegment
                   ? { backgroundColor: palette.bg }
                   : styles.partnerBubble,
                 isDimmed && styles.segmentBubbleDimmed,
@@ -111,13 +111,13 @@ export function TeleprompterDisplay({
                   <ThemedView
                     style={[
                       styles.activeBadge,
-                      !isPracticeSegment && styles.partnerBadge,
+                      !isUserSegment && styles.partnerBadge,
                     ]}
                   >
                     <ThemedText
                       style={[
                         styles.activeBadgeText,
-                        !isPracticeSegment && styles.partnerBadgeText,
+                        !isUserSegment && styles.partnerBadgeText,
                       ]}
                     >
                       {hasActiveTarget ? "Speak now" : "Reviewed"}
@@ -128,27 +128,18 @@ export function TeleprompterDisplay({
 
               <View style={styles.wordsRow}>
                 {segmentWords.map((word) => {
-                  const isSpoken =
-                    isPracticeSegment &&
-                    word.globalIndex <= spokenThroughWordIndex;
-                  const isCurrent =
-                    isPracticeSegment && word.globalIndex === currentWordIndex;
-                  const isCorrection =
-                    isPracticeSegment &&
-                    correctionIndexes.has(word.globalIndex);
+                  const isSpoken = word.globalIndex <= spokenThroughWordIndex;
+                  const isCurrent = word.globalIndex === currentWordIndex;
+                  const isCorrection = correctionIndexes.has(word.globalIndex);
 
                   return (
                     <Pressable
                       key={`${segmentIndex}-${word.globalIndex}-${word.text}`}
-                      disabled={!isPracticeSegment && !onWordLongPress}
+                      disabled={!onWordPress && !onWordLongPress}
                       delayLongPress={280}
                       hitSlop={{ top: 8, bottom: 8, left: 4, right: 4 }}
                       onLongPress={() => handleWordLongPress(word)}
-                      onPress={() => {
-                        if (isPracticeSegment) {
-                          handleWordPress(word);
-                        }
-                      }}
+                      onPress={() => handleWordPress(word)}
                       onPressIn={() => {
                         longPressHandledRef.current = false;
                       }}
@@ -158,7 +149,7 @@ export function TeleprompterDisplay({
                         style={[
                           styles.word,
                           { color: bubbleTextColor },
-                          !isPracticeSegment && styles.partnerWord,
+                          !isUserSegment && styles.partnerWord,
                           isSpoken && styles.wordSpoken,
                           isCurrent && styles.wordCurrent,
                           isCorrection && styles.wordCorrection,

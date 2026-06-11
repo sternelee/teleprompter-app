@@ -1,12 +1,16 @@
 import { router } from "expo-router";
 import { useCallback, useMemo, useState } from "react";
 import {
+  KeyboardAvoidingView,
+  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
   TextInput,
+  useWindowDimensions,
   View,
 } from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
 
 import { ThemedText } from "@/components/themed-text";
 import { ThemedView } from "@/components/themed-view";
@@ -14,7 +18,7 @@ import { Colors, Radius, Shadows, Spacing } from "@/constants/theme";
 import { useApp } from "@/contexts/app-context";
 import { generateDialogue } from "@/services/openai";
 
-const MAX_CONTENT_WIDTH = 880;
+const MAX_CONTENT_WIDTH = 760;
 
 const promptSuggestions = [
   {
@@ -37,20 +41,25 @@ const promptSuggestions = [
   },
 ];
 
-const practiceSteps = [
+const homeTabs = [
   {
-    title: "Describe the moment",
-    detail: "Name the place, roles, and your goal.",
+    helper: "Write the moment",
+    key: "scene",
+    title: "Scene",
   },
   {
-    title: "Generate your lines",
-    detail: "DeepSeek builds a natural back-and-forth scene.",
+    helper: "Connect AI",
+    key: "key",
+    title: "Key",
   },
   {
-    title: "Speak with cues",
-    detail: "Practice aloud with live highlighting and prompts.",
+    helper: "Check setup",
+    key: "review",
+    title: "Start",
   },
-];
+] as const;
+
+type HomeTabKey = (typeof homeTabs)[number]["key"];
 
 function getSceneReadiness(scene: string) {
   const wordCount = scene.split(/\s+/).filter(Boolean).length;
@@ -66,7 +75,7 @@ function getSceneReadiness(scene: string) {
 
   if (wordCount >= 9) {
     return {
-      detail: "Nice. You gave enough context for a realistic dialogue.",
+      detail: "Enough context for a natural role-play.",
       label: "Ready",
       tone: "success" as const,
     };
@@ -74,25 +83,25 @@ function getSceneReadiness(scene: string) {
 
   if (wordCount >= 5) {
     return {
-      detail: "Good start. Add one more detail like urgency, tone, or goal.",
+      detail: "Add one more detail like urgency, tone, or your goal.",
       label: "Almost",
       tone: "warning" as const,
     };
   }
 
   return {
-    detail: "Try adding who you are talking to and what you want to achieve.",
+    detail: "Add who you are talking to and what you want to achieve.",
     label: "Need detail",
     tone: "warning" as const,
   };
 }
 
 function shortenScene(scene: string) {
-  if (scene.length <= 120) {
+  if (scene.length <= 128) {
     return scene;
   }
 
-  return `${scene.slice(0, 117).trimEnd()}...`;
+  return `${scene.slice(0, 125).trimEnd()}...`;
 }
 
 export default function HomeScreen() {
@@ -106,14 +115,25 @@ export default function HomeScreen() {
     setScene,
     setSegments,
   } = useApp();
-  const [generatePressed, setGeneratePressed] = useState(false);
+  const { width } = useWindowDimensions();
+  const isCompact = width < 640;
+  const [activeTab, setActiveTab] = useState<HomeTabKey>("scene");
+  const [backPressed, setBackPressed] = useState(false);
+  const [primaryPressed, setPrimaryPressed] = useState(false);
   const [settingsPressed, setSettingsPressed] = useState(false);
 
   const trimmedScene = scene.trim();
+  const hasScene = Boolean(trimmedScene);
+  const hasApiKey = Boolean(apiKey);
   const readiness = useMemo(
     () => getSceneReadiness(trimmedScene),
     [trimmedScene],
   );
+  const sceneWordCount = useMemo(
+    () => trimmedScene.split(/\s+/).filter(Boolean).length,
+    [trimmedScene],
+  );
+  const activeTabIndex = homeTabs.findIndex((tab) => tab.key === activeTab);
 
   const handleSceneChange = useCallback(
     (value: string) => {
@@ -129,6 +149,7 @@ export default function HomeScreen() {
   const handleSuggestionPress = useCallback(
     (nextScene: string) => {
       handleSceneChange(nextScene);
+      setActiveTab("scene");
     },
     [handleSceneChange],
   );
@@ -140,7 +161,7 @@ export default function HomeScreen() {
       setGenerationError(
         "Add your DeepSeek API key in Settings before generating a scene.",
       );
-      router.push("/settings");
+      setActiveTab("key");
       return;
     }
 
@@ -148,9 +169,11 @@ export default function HomeScreen() {
       setGenerationError(
         "Describe a speaking scene before generating dialogue.",
       );
+      setActiveTab("scene");
       return;
     }
 
+    setActiveTab("review");
     setGenerationError(null);
     setIsGenerating(true);
     setScene(nextScene);
@@ -177,219 +200,481 @@ export default function HomeScreen() {
     trimmedScene,
   ]);
 
+  const handlePrimaryAction = useCallback(() => {
+    if (activeTab === "scene") {
+      if (!hasScene) {
+        setGenerationError(
+          "Describe a speaking scene before moving to setup.",
+        );
+        return;
+      }
+
+      setGenerationError(null);
+      setActiveTab("key");
+      return;
+    }
+
+    if (activeTab === "key") {
+      if (!hasApiKey) {
+        router.push("/settings");
+        return;
+      }
+
+      setGenerationError(null);
+      setActiveTab("review");
+      return;
+    }
+
+    void handleGenerate();
+  }, [
+    activeTab,
+    handleGenerate,
+    hasApiKey,
+    hasScene,
+    setGenerationError,
+  ]);
+
+  const handleBack = useCallback(() => {
+    if (activeTab === "review") {
+      setActiveTab("key");
+      return;
+    }
+
+    if (activeTab === "key") {
+      setActiveTab("scene");
+    }
+  }, [activeTab]);
+
+  const primaryActionLabel = useMemo(() => {
+    if (activeTab === "scene") {
+      return "Continue";
+    }
+
+    if (activeTab === "key") {
+      return hasApiKey ? "Review setup" : "Add DeepSeek key";
+    }
+
+    return isGenerating ? "Generating dialogue..." : "Start speaking practice";
+  }, [activeTab, hasApiKey, isGenerating]);
+
   return (
-    <ScrollView
-      contentContainerStyle={styles.scrollContent}
-      keyboardShouldPersistTaps="handled"
-      showsVerticalScrollIndicator={false}
-    >
-      <ThemedView style={styles.page}>
-        <ThemedView style={styles.heroCard}>
-          <ThemedView style={styles.heroBadge}>
-            <ThemedText style={styles.heroBadgeText}>AI scene coach</ThemedText>
-          </ThemedView>
-
-          <ThemedText type="title" style={styles.title}>
-            Practice real conversations before they happen.
-          </ThemedText>
-          <ThemedText style={styles.subtitle}>
-            Turn a scene into a guided English role-play, then speak through it
-            with a live teleprompter.
-          </ThemedText>
-
-          <View style={styles.stepsRow}>
-            {practiceSteps.map((step, index) => (
-              <ThemedView key={step.title} style={styles.stepCard}>
-                <ThemedView style={styles.stepNumber}>
-                  <ThemedText style={styles.stepNumberText}>
-                    {index + 1}
+    <ThemedView style={styles.screen}>
+      <SafeAreaView style={styles.safeArea}>
+        <KeyboardAvoidingView
+          behavior={Platform.OS === "ios" ? "padding" : undefined}
+          style={styles.keyboardView}
+        >
+          <ScrollView
+            contentContainerStyle={[
+              styles.scrollContent,
+              isCompact && styles.scrollContentCompact,
+            ]}
+            keyboardShouldPersistTaps="handled"
+            showsVerticalScrollIndicator={false}
+          >
+            <ThemedView
+              style={[styles.page, isCompact && styles.pageCompact]}
+            >
+              <View style={styles.header}>
+                <ThemedView style={styles.heroBadge}>
+                  <ThemedText style={styles.heroBadgeText}>
+                    AI scene coach
                   </ThemedText>
                 </ThemedView>
+
                 <ThemedText
-                  type="default"
-                  weight="700"
-                  style={styles.stepTitle}
+                  type="title"
+                  style={[styles.title, isCompact && styles.titleCompact]}
                 >
-                  {step.title}
+                  Build a speaking drill
                 </ThemedText>
-                <ThemedText style={styles.stepDetail}>{step.detail}</ThemedText>
-              </ThemedView>
-            ))}
-          </View>
-        </ThemedView>
-
-        <ThemedView style={styles.panel}>
-          <View style={styles.panelHeader}>
-            <View style={styles.headerCopy}>
-              <ThemedText type="subtitle" style={styles.panelTitle}>
-                Build your practice scene
-              </ThemedText>
-              <ThemedText style={styles.panelDescription}>
-                The more specific your scene is, the more natural and useful the
-                dialogue becomes.
-              </ThemedText>
-            </View>
-
-            <ThemedView
-              style={[
-                styles.statusPill,
-                readiness.tone === "success"
-                  ? styles.statusPillSuccess
-                  : readiness.tone === "warning"
-                    ? styles.statusPillWarning
-                    : styles.statusPillNeutral,
-              ]}
-            >
-              <ThemedText style={styles.statusPillText}>
-                {readiness.label}
-              </ThemedText>
-            </ThemedView>
-          </View>
-
-          <TextInput
-            multiline
-            onChangeText={handleSceneChange}
-            placeholder="e.g. Ordering coffee before a meeting, asking for oat milk, and checking if the cup size is smaller."
-            placeholderTextColor="rgba(121, 79, 39, 0.45)"
-            style={styles.sceneInput}
-            textAlignVertical="top"
-            value={scene}
-          />
-
-          <ThemedText style={styles.helperText}>{readiness.detail}</ThemedText>
-
-          {trimmedScene ? (
-            <ThemedView style={styles.previewCard}>
-              <ThemedText
-                type="default"
-                weight="700"
-                style={styles.previewTitle}
-              >
-                Practice preview
-              </ThemedText>
-              <ThemedText style={styles.previewBody}>
-                {shortenScene(trimmedScene)}
-              </ThemedText>
-              <View style={styles.previewMetaRow}>
-                <ThemedText style={styles.previewMeta}>
-                  Scene saved for this session
-                </ThemedText>
-                <ThemedText style={styles.previewMeta}>
-                  {trimmedScene.split(/\s+/).filter(Boolean).length} words
+                <ThemedText
+                  style={[styles.subtitle, isCompact && styles.subtitleCompact]}
+                >
+                  Write the moment, connect DeepSeek, then rehearse with live
+                  cues.
                 </ThemedText>
               </View>
+
+              <View style={styles.tabBar}>
+                {homeTabs.map((tab, index) => {
+                  const isActive = tab.key === activeTab;
+                  const isComplete =
+                    tab.key === "scene"
+                      ? hasScene
+                      : tab.key === "key"
+                        ? hasApiKey
+                        : hasScene && hasApiKey;
+
+                  return (
+                    <Pressable
+                      key={tab.key}
+                      onPress={() => setActiveTab(tab.key)}
+                      style={styles.tabPressable}
+                    >
+                      <ThemedView
+                        style={[
+                          styles.tabItem,
+                          isActive && styles.tabItemActive,
+                        ]}
+                      >
+                        <View
+                          style={[
+                            styles.tabNumber,
+                            isComplete && styles.tabNumberComplete,
+                            isActive && styles.tabNumberActive,
+                          ]}
+                        >
+                          <ThemedText
+                            style={[
+                              styles.tabNumberText,
+                              isActive && styles.tabNumberTextActive,
+                            ]}
+                          >
+                            {index + 1}
+                          </ThemedText>
+                        </View>
+                        <View style={styles.tabCopy}>
+                          <ThemedText
+                            style={[
+                              styles.tabTitle,
+                              isActive && styles.tabTitleActive,
+                            ]}
+                            numberOfLines={1}
+                          >
+                            {tab.title}
+                          </ThemedText>
+                          {!isCompact ? (
+                            <ThemedText
+                              style={styles.tabHelper}
+                              numberOfLines={1}
+                            >
+                              {tab.helper}
+                            </ThemedText>
+                          ) : null}
+                        </View>
+                      </ThemedView>
+                    </Pressable>
+                  );
+                })}
+              </View>
+
+              <ThemedView style={styles.stepPanel}>
+                <View style={styles.stepHeader}>
+                  <View style={styles.headerCopy}>
+                    <ThemedText style={styles.stepKicker}>
+                      Step {activeTabIndex + 1} of {homeTabs.length}
+                    </ThemedText>
+                    <ThemedText type="subtitle" style={styles.panelTitle}>
+                      {activeTab === "scene"
+                        ? "Describe the scene"
+                        : activeTab === "key"
+                          ? "Connect DeepSeek"
+                          : "Ready check"}
+                    </ThemedText>
+                  </View>
+
+                  <ThemedView
+                    style={[
+                      styles.statusPill,
+                      activeTab === "scene"
+                        ? readiness.tone === "success"
+                          ? styles.statusPillSuccess
+                          : readiness.tone === "warning"
+                            ? styles.statusPillWarning
+                            : styles.statusPillNeutral
+                        : activeTab === "key"
+                          ? hasApiKey
+                            ? styles.statusPillSuccess
+                            : styles.statusPillWarning
+                          : hasScene && hasApiKey
+                            ? styles.statusPillSuccess
+                            : styles.statusPillWarning,
+                    ]}
+                  >
+                    <ThemedText style={styles.statusPillText}>
+                      {activeTab === "scene"
+                        ? readiness.label
+                        : activeTab === "key"
+                          ? hasApiKey
+                            ? "Configured"
+                            : "Required"
+                          : hasScene && hasApiKey
+                            ? "Ready"
+                            : "Check"}
+                    </ThemedText>
+                  </ThemedView>
+                </View>
+
+                {activeTab === "scene" ? (
+                  <View style={styles.stepBody}>
+                    <TextInput
+                      multiline
+                      onChangeText={handleSceneChange}
+                      placeholder="e.g. Ordering coffee before a meeting, asking for oat milk, and checking if the cup size is smaller."
+                      placeholderTextColor="rgba(121, 79, 39, 0.45)"
+                      style={[
+                        styles.sceneInput,
+                        isCompact && styles.sceneInputCompact,
+                      ]}
+                      textAlignVertical="top"
+                      value={scene}
+                    />
+
+                    <View style={styles.helperRow}>
+                      <ThemedText style={styles.helperText}>
+                        {readiness.detail}
+                      </ThemedText>
+                      {hasScene ? (
+                        <ThemedText style={styles.wordCount}>
+                          {sceneWordCount} words
+                        </ThemedText>
+                      ) : null}
+                    </View>
+
+                    <View style={styles.suggestionsBlock}>
+                      <ThemedText style={styles.sectionLabel}>
+                        Quick starts
+                      </ThemedText>
+                      <View style={styles.suggestionsWrap}>
+                        {promptSuggestions.map((suggestion) => (
+                          <Pressable
+                            key={suggestion.label}
+                            onPress={() =>
+                              handleSuggestionPress(suggestion.scene)
+                            }
+                            style={styles.suggestionPressable}
+                          >
+                            <ThemedView style={styles.suggestionChip}>
+                              <ThemedText style={styles.suggestionText}>
+                                {suggestion.label}
+                              </ThemedText>
+                            </ThemedView>
+                          </Pressable>
+                        ))}
+                      </View>
+                    </View>
+                  </View>
+                ) : null}
+
+                {activeTab === "key" ? (
+                  <View style={styles.stepBody}>
+                    <ThemedText style={styles.bodyText}>
+                      {hasApiKey
+                        ? "Your DeepSeek key is ready for this session."
+                        : "Add a DeepSeek API key once, then return here to generate role-play lines."}
+                    </ThemedText>
+
+                    <ThemedView style={styles.keyStatusCard}>
+                      <View style={styles.keyBadge}>
+                        <ThemedText style={styles.keyBadgeText}>
+                          {hasApiKey ? "OK" : "KEY"}
+                        </ThemedText>
+                      </View>
+                      <View style={styles.keyStatusCopy}>
+                        <ThemedText style={styles.keyStatusTitle}>
+                          {hasApiKey ? "Connected" : "API key required"}
+                        </ThemedText>
+                        <ThemedText style={styles.keyStatusDetail}>
+                          Stored only in memory and used only for DeepSeek
+                          requests.
+                        </ThemedText>
+                      </View>
+                    </ThemedView>
+
+                    {hasApiKey ? (
+                      <Pressable
+                        onPress={() => router.push("/settings")}
+                        onPressIn={() => setSettingsPressed(true)}
+                        onPressOut={() => setSettingsPressed(false)}
+                      >
+                        <ThemedView
+                          style={[
+                            styles.secondaryButton,
+                            settingsPressed && styles.secondaryButtonPressed,
+                          ]}
+                        >
+                          <ThemedText style={styles.secondaryButtonText}>
+                            Update key
+                          </ThemedText>
+                        </ThemedView>
+                      </Pressable>
+                    ) : null}
+                  </View>
+                ) : null}
+
+                {activeTab === "review" ? (
+                  <View style={styles.stepBody}>
+                    <ThemedView style={styles.reviewCard}>
+                      <View style={styles.reviewRow}>
+                        <View style={styles.reviewCopy}>
+                          <ThemedText style={styles.reviewTitle}>
+                            Practice scene
+                          </ThemedText>
+                          <ThemedText
+                            style={styles.reviewDetail}
+                            numberOfLines={hasScene ? 3 : 1}
+                          >
+                            {hasScene
+                              ? shortenScene(trimmedScene)
+                              : "Add a speaking scene first."}
+                          </ThemedText>
+                        </View>
+                        <ThemedText
+                          style={[
+                            styles.reviewState,
+                            hasScene
+                              ? styles.reviewStateReady
+                              : styles.reviewStateMissing,
+                          ]}
+                        >
+                          {hasScene ? "Ready" : "Needed"}
+                        </ThemedText>
+                      </View>
+
+                      <View style={styles.divider} />
+
+                      <View style={styles.reviewRow}>
+                        <View style={styles.reviewCopy}>
+                          <ThemedText style={styles.reviewTitle}>
+                            DeepSeek
+                          </ThemedText>
+                          <ThemedText style={styles.reviewDetail}>
+                            {hasApiKey
+                              ? "Key configured for this session."
+                              : "Add your API key before generating dialogue."}
+                          </ThemedText>
+                        </View>
+                        <ThemedText
+                          style={[
+                            styles.reviewState,
+                            hasApiKey
+                              ? styles.reviewStateReady
+                              : styles.reviewStateMissing,
+                          ]}
+                        >
+                          {hasApiKey ? "Ready" : "Needed"}
+                        </ThemedText>
+                      </View>
+                    </ThemedView>
+                  </View>
+                ) : null}
+
+                {generationError ? (
+                  <ThemedView style={styles.errorCard}>
+                    <ThemedText style={styles.errorTitle}>
+                      Needs attention
+                    </ThemedText>
+                    <ThemedText style={styles.errorBody}>
+                      {generationError}
+                    </ThemedText>
+                  </ThemedView>
+                ) : null}
+
+                <View
+                  style={[
+                    styles.actionRow,
+                    isCompact && styles.actionRowCompact,
+                  ]}
+                >
+                  {activeTab !== "scene" ? (
+                    <Pressable
+                      disabled={isGenerating}
+                      onPress={handleBack}
+                      onPressIn={() => setBackPressed(true)}
+                      onPressOut={() => setBackPressed(false)}
+                      style={[
+                        styles.backPressable,
+                        isCompact && styles.fullWidthAction,
+                      ]}
+                    >
+                      <ThemedView
+                        style={[
+                          styles.backButton,
+                          backPressed && styles.secondaryButtonPressed,
+                        ]}
+                      >
+                        <ThemedText style={styles.backButtonText}>
+                          Back
+                        </ThemedText>
+                      </ThemedView>
+                    </Pressable>
+                  ) : null}
+
+                  <Pressable
+                    disabled={isGenerating}
+                    onPress={handlePrimaryAction}
+                    onPressIn={() => setPrimaryPressed(true)}
+                    onPressOut={() => setPrimaryPressed(false)}
+                    style={[
+                      styles.primaryPressable,
+                      isCompact && styles.fullWidthAction,
+                    ]}
+                  >
+                    <ThemedView
+                      style={[
+                        styles.primaryButton,
+                        (primaryPressed || isGenerating) &&
+                          styles.primaryButtonPressed,
+                        isGenerating && styles.primaryButtonDisabled,
+                      ]}
+                    >
+                      <ThemedText style={styles.primaryButtonText}>
+                        {primaryActionLabel}
+                      </ThemedText>
+                    </ThemedView>
+                  </Pressable>
+                </View>
+              </ThemedView>
             </ThemedView>
-          ) : null}
-
-          <View style={styles.suggestionsWrap}>
-            {promptSuggestions.map((suggestion) => (
-              <Pressable
-                key={suggestion.label}
-                onPress={() => handleSuggestionPress(suggestion.scene)}
-                style={styles.suggestionPressable}
-              >
-                <ThemedView style={styles.suggestionChip}>
-                  <ThemedText style={styles.suggestionText}>
-                    {suggestion.label}
-                  </ThemedText>
-                </ThemedView>
-              </Pressable>
-            ))}
-          </View>
-        </ThemedView>
-
-        <ThemedView style={styles.panel}>
-          <View style={styles.panelHeader}>
-            <View style={styles.headerCopy}>
-              <ThemedText type="subtitle" style={styles.panelTitle}>
-                Session setup
-              </ThemedText>
-              <ThemedText style={styles.panelDescription}>
-                Keep your API key in Settings, then jump into role-plays from
-                here.
-              </ThemedText>
-            </View>
-
-            <ThemedView
-              style={[
-                styles.statusPill,
-                apiKey ? styles.statusPillSuccess : styles.statusPillWarning,
-              ]}
-            >
-              <ThemedText style={styles.statusPillText}>
-                {apiKey ? "Configured" : "Required"}
-              </ThemedText>
-            </ThemedView>
-          </View>
-
-          <ThemedText style={styles.sessionBody}>
-            {apiKey
-              ? "Your key is ready. Generate a scene when the prompt feels realistic enough to rehearse."
-              : "Add your DeepSeek API key once so dialogue generation is ready when inspiration hits."}
-          </ThemedText>
-
-          <Pressable
-            onPress={() => router.push("/settings")}
-            onPressIn={() => setSettingsPressed(true)}
-            onPressOut={() => setSettingsPressed(false)}
-          >
-            <ThemedView
-              style={[
-                styles.secondaryButton,
-                settingsPressed && styles.secondaryButtonPressed,
-              ]}
-            >
-              <ThemedText style={styles.secondaryButtonText}>
-                Open Settings
-              </ThemedText>
-            </ThemedView>
-          </Pressable>
-        </ThemedView>
-
-        {generationError ? (
-          <ThemedView style={styles.errorCard}>
-            <ThemedText style={styles.errorTitle}>
-              Something needs attention
-            </ThemedText>
-            <ThemedText style={styles.errorBody}>{generationError}</ThemedText>
-          </ThemedView>
-        ) : null}
-
-        <Pressable
-          disabled={isGenerating}
-          onPress={handleGenerate}
-          onPressIn={() => setGeneratePressed(true)}
-          onPressOut={() => setGeneratePressed(false)}
-        >
-          <ThemedView
-            style={[
-              styles.primaryButton,
-              (generatePressed || isGenerating) && styles.primaryButtonPressed,
-              isGenerating && styles.primaryButtonDisabled,
-            ]}
-          >
-            <ThemedText style={styles.primaryButtonText}>
-              {isGenerating
-                ? "Generating dialogue..."
-                : "Start speaking practice"}
-            </ThemedText>
-          </ThemedView>
-        </Pressable>
-
-        <ThemedText style={styles.footerNote}>
-          Tip: mention the place, relationship, and your goal for better
-          follow-up lines and more realistic speaking turns.
-        </ThemedText>
-      </ThemedView>
-    </ScrollView>
+          </ScrollView>
+        </KeyboardAvoidingView>
+      </SafeAreaView>
+    </ThemedView>
   );
 }
 
 const styles = StyleSheet.create({
-  errorBody: {
+  actionRow: {
+    alignItems: "center",
+    flexDirection: "row",
+    gap: Spacing.md,
+    justifyContent: "space-between",
+  },
+  actionRowCompact: {
+    alignItems: "stretch",
+    flexDirection: "column-reverse",
+  },
+  backButton: {
+    alignItems: "center",
+    backgroundColor: "#f1ead7",
+    borderRadius: Radius.pill,
+    paddingHorizontal: Spacing.xl,
+    paddingVertical: Spacing.md,
+    ...Shadows.btn,
+  },
+  backButtonText: {
+    color: Colors.light.text,
+    fontSize: 15,
+    fontWeight: "800",
+    letterSpacing: 0,
+  },
+  backPressable: {
+    flexShrink: 0,
+  },
+  bodyText: {
     color: Colors.light.text,
     fontSize: 15,
     lineHeight: 22,
+  },
+  divider: {
+    backgroundColor: "rgba(121, 79, 39, 0.12)",
+    height: 1,
+  },
+  errorBody: {
+    color: Colors.light.text,
+    fontSize: 14,
+    lineHeight: 20,
   },
   errorCard: {
     backgroundColor: "#fff0f0",
@@ -397,26 +682,35 @@ const styles = StyleSheet.create({
     borderRadius: Radius.base,
     borderWidth: 1,
     gap: Spacing.xs,
-    padding: Spacing.lg,
+    padding: Spacing.md,
     width: "100%",
   },
   errorTitle: {
     color: Colors.light.error,
-    fontSize: 16,
+    fontSize: 15,
     fontWeight: "800",
+    letterSpacing: 0,
   },
-  footerNote: {
-    color: "rgba(121, 79, 39, 0.72)",
-    fontSize: 14,
-    lineHeight: 20,
-    textAlign: "center",
+  fullWidthAction: {
+    width: "100%",
+  },
+  header: {
+    gap: Spacing.sm,
+    width: "100%",
   },
   headerCopy: {
     flex: 1,
-    gap: 4,
+    gap: Spacing.xs,
+  },
+  helperRow: {
+    alignItems: "flex-start",
+    flexDirection: "row",
+    gap: Spacing.md,
+    justifyContent: "space-between",
   },
   helperText: {
     color: "rgba(121, 79, 39, 0.72)",
+    flex: 1,
     fontSize: 14,
     lineHeight: 20,
   },
@@ -431,79 +725,71 @@ const styles = StyleSheet.create({
     color: Colors.light.primary,
     fontSize: 12,
     fontWeight: "800",
-    letterSpacing: 0.4,
+    letterSpacing: 0,
     textTransform: "uppercase",
   },
-  heroCard: {
+  keyBadge: {
+    alignItems: "center",
+    backgroundColor: Colors.light.primaryBg,
+    borderRadius: Radius.base,
+    height: 48,
+    justifyContent: "center",
+    width: 48,
+  },
+  keyBadgeText: {
+    color: Colors.light.primary,
+    fontSize: 12,
+    fontWeight: "900",
+    letterSpacing: 0,
+  },
+  keyStatusCard: {
+    alignItems: "center",
     backgroundColor: "#fff9ef",
-    borderRadius: Radius.lg,
+    borderColor: "rgba(121, 79, 39, 0.12)",
+    borderRadius: Radius.base,
+    borderWidth: 1,
+    flexDirection: "row",
     gap: Spacing.md,
-    padding: Spacing.xl,
-    width: "100%",
-    ...Shadows.card,
+    padding: Spacing.md,
+  },
+  keyStatusCopy: {
+    flex: 1,
+    gap: Spacing.xs,
+  },
+  keyStatusDetail: {
+    color: "rgba(121, 79, 39, 0.7)",
+    fontSize: 13,
+    lineHeight: 18,
+  },
+  keyStatusTitle: {
+    color: Colors.light.text,
+    fontSize: 16,
+    fontWeight: "800",
+    letterSpacing: 0,
+  },
+  keyboardView: {
+    flex: 1,
   },
   page: {
-    alignItems: "center",
     flex: 1,
     gap: Spacing.lg,
     maxWidth: MAX_CONTENT_WIDTH,
     width: "100%",
   },
-  panel: {
-    backgroundColor: Colors.light.backgroundContent,
-    borderRadius: Radius.lg,
+  pageCompact: {
     gap: Spacing.md,
-    padding: Spacing.xl,
-    width: "100%",
-    ...Shadows.card,
-  },
-  panelDescription: {
-    color: "rgba(121, 79, 39, 0.72)",
-    fontSize: 14,
-    lineHeight: 20,
-  },
-  panelHeader: {
-    alignItems: "flex-start",
-    flexDirection: "row",
-    gap: Spacing.md,
-    justifyContent: "space-between",
   },
   panelTitle: {
     color: Colors.light.text,
-  },
-  previewBody: {
-    color: Colors.light.text,
-    fontSize: 15,
-    lineHeight: 22,
-  },
-  previewCard: {
-    backgroundColor: "#f8fff7",
-    borderColor: "rgba(111, 186, 44, 0.16)",
-    borderRadius: Radius.base,
-    borderWidth: 1,
-    gap: Spacing.sm,
-    padding: Spacing.lg,
-  },
-  previewMeta: {
-    color: "rgba(121, 79, 39, 0.62)",
-    fontSize: 13,
-    fontWeight: "700",
-  },
-  previewMetaRow: {
-    alignItems: "center",
-    flexDirection: "row",
-    justifyContent: "space-between",
-  },
-  previewTitle: {
-    color: "#4f7f2c",
+    letterSpacing: 0,
   },
   primaryButton: {
     alignItems: "center",
     backgroundColor: Colors.light.primary,
     borderRadius: Radius.pill,
-    minWidth: 280,
+    minHeight: 54,
     paddingHorizontal: Spacing.xl,
-    paddingVertical: Spacing.lg,
+    paddingVertical: Spacing.md,
     ...Shadows.btn,
   },
   primaryButtonDisabled: {
@@ -515,8 +801,61 @@ const styles = StyleSheet.create({
   },
   primaryButtonText: {
     color: "#ffffff",
-    fontSize: 17,
+    fontSize: 16,
     fontWeight: "900",
+    letterSpacing: 0,
+  },
+  primaryPressable: {
+    flex: 1,
+  },
+  reviewCard: {
+    backgroundColor: "#fff9ef",
+    borderColor: "rgba(121, 79, 39, 0.12)",
+    borderRadius: Radius.base,
+    borderWidth: 1,
+    gap: Spacing.md,
+    padding: Spacing.md,
+  },
+  reviewCopy: {
+    flex: 1,
+    gap: Spacing.xs,
+  },
+  reviewDetail: {
+    color: "rgba(121, 79, 39, 0.72)",
+    fontSize: 14,
+    lineHeight: 20,
+  },
+  reviewRow: {
+    alignItems: "flex-start",
+    flexDirection: "row",
+    gap: Spacing.md,
+    justifyContent: "space-between",
+  },
+  reviewState: {
+    borderRadius: Radius.pill,
+    fontSize: 12,
+    fontWeight: "800",
+    letterSpacing: 0,
+    overflow: "hidden",
+    paddingHorizontal: Spacing.sm,
+    paddingVertical: 4,
+  },
+  reviewStateMissing: {
+    backgroundColor: "rgba(255, 209, 102, 0.24)",
+    color: Colors.light.text,
+  },
+  reviewStateReady: {
+    backgroundColor: "rgba(111, 186, 44, 0.16)",
+    color: "#4f7f2c",
+  },
+  reviewTitle: {
+    color: Colors.light.text,
+    fontSize: 15,
+    fontWeight: "800",
+    letterSpacing: 0,
+  },
+  safeArea: {
+    flex: 1,
   },
   sceneInput: {
     backgroundColor: Colors.light.background,
@@ -524,18 +863,32 @@ const styles = StyleSheet.create({
     borderRadius: Radius.base,
     borderWidth: 1,
     color: Colors.light.text,
-    fontSize: 18,
-    lineHeight: 28,
-    minHeight: 150,
+    fontFamily: "Nunito",
+    fontSize: 17,
+    fontWeight: "500",
+    lineHeight: 26,
+    minHeight: 152,
     paddingHorizontal: Spacing.lg,
     paddingVertical: Spacing.lg,
+  },
+  sceneInputCompact: {
+    fontSize: 16,
+    lineHeight: 24,
+    minHeight: 132,
+  },
+  screen: {
+    flex: 1,
   },
   scrollContent: {
     alignItems: "center",
     backgroundColor: Colors.light.background,
-    minHeight: "100%",
+    flexGrow: 1,
     paddingHorizontal: Spacing.lg,
     paddingVertical: Spacing.xl,
+  },
+  scrollContentCompact: {
+    paddingHorizontal: Spacing.md,
+    paddingVertical: Spacing.lg,
   },
   secondaryButton: {
     alignItems: "center",
@@ -554,11 +907,13 @@ const styles = StyleSheet.create({
     color: Colors.light.text,
     fontSize: 15,
     fontWeight: "800",
+    letterSpacing: 0,
   },
-  sessionBody: {
-    color: Colors.light.text,
-    fontSize: 15,
-    lineHeight: 22,
+  sectionLabel: {
+    color: "rgba(121, 79, 39, 0.72)",
+    fontSize: 13,
+    fontWeight: "800",
+    letterSpacing: 0,
   },
   statusPill: {
     alignItems: "center",
@@ -576,51 +931,44 @@ const styles = StyleSheet.create({
     color: Colors.light.text,
     fontSize: 12,
     fontWeight: "800",
-    letterSpacing: 0.4,
+    letterSpacing: 0,
     textTransform: "uppercase",
   },
   statusPillWarning: {
     backgroundColor: "rgba(255, 209, 102, 0.24)",
   },
-  stepCard: {
-    backgroundColor: "rgba(255, 255, 255, 0.72)",
-    borderRadius: Radius.base,
-    flex: 1,
-    gap: Spacing.xs,
-    minWidth: 180,
-    padding: Spacing.lg,
-  },
-  stepDetail: {
-    color: "rgba(121, 79, 39, 0.72)",
-    fontSize: 14,
-    lineHeight: 20,
-  },
-  stepNumber: {
-    alignItems: "center",
-    backgroundColor: Colors.light.primary,
-    borderRadius: Radius.pill,
-    height: 28,
-    justifyContent: "center",
-    width: 28,
-  },
-  stepNumberText: {
-    color: "#ffffff",
-    fontSize: 14,
-    fontWeight: "900",
-  },
-  stepTitle: {
-    color: Colors.light.text,
-    fontSize: 16,
-  },
-  stepsRow: {
-    flexDirection: "row",
-    flexWrap: "wrap",
+  stepBody: {
     gap: Spacing.md,
+  },
+  stepHeader: {
+    alignItems: "flex-start",
+    flexDirection: "row",
+    gap: Spacing.md,
+    justifyContent: "space-between",
+  },
+  stepKicker: {
+    color: "rgba(121, 79, 39, 0.62)",
+    fontSize: 13,
+    fontWeight: "800",
+    letterSpacing: 0,
+  },
+  stepPanel: {
+    backgroundColor: Colors.light.backgroundContent,
+    borderRadius: Radius.lg,
+    gap: Spacing.lg,
+    padding: Spacing.lg,
+    width: "100%",
+    ...Shadows.card,
   },
   subtitle: {
     color: "rgba(121, 79, 39, 0.78)",
     fontSize: 16,
     lineHeight: 24,
+    maxWidth: 560,
+  },
+  subtitleCompact: {
+    fontSize: 15,
+    lineHeight: 22,
   },
   suggestionChip: {
     backgroundColor: "#f1ead7",
@@ -629,20 +977,105 @@ const styles = StyleSheet.create({
     paddingVertical: Spacing.sm,
   },
   suggestionPressable: {
-    marginBottom: Spacing.sm,
+    marginBottom: Spacing.xs,
   },
   suggestionText: {
     color: Colors.light.text,
     fontSize: 14,
     fontWeight: "700",
+    letterSpacing: 0,
+  },
+  suggestionsBlock: {
+    gap: Spacing.sm,
   },
   suggestionsWrap: {
     flexDirection: "row",
     flexWrap: "wrap",
     gap: Spacing.sm,
   },
+  tabBar: {
+    backgroundColor: "#efe7d5",
+    borderRadius: Radius.lg,
+    flexDirection: "row",
+    gap: Spacing.xs,
+    padding: Spacing.xs,
+    width: "100%",
+  },
+  tabCopy: {
+    flex: 1,
+    gap: 2,
+    minWidth: 0,
+  },
+  tabHelper: {
+    color: "rgba(121, 79, 39, 0.58)",
+    fontSize: 12,
+    fontWeight: "700",
+    letterSpacing: 0,
+  },
+  tabItem: {
+    alignItems: "center",
+    backgroundColor: "transparent",
+    borderRadius: Radius.base,
+    flexDirection: "row",
+    gap: Spacing.sm,
+    minHeight: 56,
+    paddingHorizontal: Spacing.sm,
+    paddingVertical: Spacing.sm,
+  },
+  tabItemActive: {
+    backgroundColor: Colors.light.backgroundContent,
+    ...Shadows.inputSmall,
+  },
+  tabNumber: {
+    alignItems: "center",
+    backgroundColor: "rgba(121, 79, 39, 0.12)",
+    borderRadius: Radius.pill,
+    height: 28,
+    justifyContent: "center",
+    width: 28,
+  },
+  tabNumberActive: {
+    backgroundColor: Colors.light.primary,
+  },
+  tabNumberComplete: {
+    backgroundColor: "rgba(111, 186, 44, 0.22)",
+  },
+  tabNumberText: {
+    color: Colors.light.text,
+    fontSize: 13,
+    fontWeight: "900",
+    letterSpacing: 0,
+  },
+  tabNumberTextActive: {
+    color: "#ffffff",
+  },
+  tabPressable: {
+    flex: 1,
+  },
+  tabTitle: {
+    color: Colors.light.text,
+    fontSize: 14,
+    fontWeight: "800",
+    letterSpacing: 0,
+  },
+  tabTitleActive: {
+    color: Colors.light.primaryActive,
+  },
   title: {
     color: Colors.light.text,
-    maxWidth: 680,
+    fontSize: 36,
+    letterSpacing: 0,
+    lineHeight: 42,
+  },
+  titleCompact: {
+    fontSize: 28,
+    lineHeight: 34,
+  },
+  wordCount: {
+    color: "rgba(121, 79, 39, 0.62)",
+    flexShrink: 0,
+    fontSize: 13,
+    fontWeight: "800",
+    letterSpacing: 0,
   },
 });

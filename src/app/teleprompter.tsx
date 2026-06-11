@@ -67,6 +67,7 @@ export default function TeleprompterScreen() {
   const [autoContinueError, setAutoContinueError] = useState<string | null>(
     null,
   );
+  const [isCoachPanelExpanded, setIsCoachPanelExpanded] = useState(false);
   const [isContinuing, setIsContinuing] = useState(false);
   const [contentHeight, setContentHeight] = useState(0);
   const [viewportHeight, setViewportHeight] = useState(0);
@@ -105,13 +106,7 @@ export default function TeleprompterScreen() {
     return grouped;
   }, [allWords, segments]);
 
-  const practiceWords = useMemo(
-    () =>
-      allWords.filter(
-        (word) => segments[word.segmentIndex]?.speaker === "user",
-      ),
-    [allWords, segments],
-  );
+  const practiceWords = allWords;
 
   const {
     currentWordIndex,
@@ -186,14 +181,14 @@ export default function TeleprompterScreen() {
     if (totalWords === 0) {
       return {
         label: "Coach",
-        text: "This dialogue has no lines marked for you yet.",
+        text: "This dialogue has no words to practice yet.",
       };
     }
 
     if (!targetPracticeWord) {
       return {
         label: "Complete",
-        text: "All of your lines are marked as practiced.",
+        text: "All dialogue lines are marked as practiced.",
       };
     }
 
@@ -226,7 +221,7 @@ export default function TeleprompterScreen() {
       text:
         remainingWords === 0
           ? "Session complete. Restart to rehearse it again."
-          : "You are on the final practice line.",
+          : "You are on the final dialogue line.",
     };
   }, [
     isContinuing,
@@ -240,8 +235,8 @@ export default function TeleprompterScreen() {
   const statusMeta = useMemo(() => {
     if (totalWords === 0) {
       return {
-        label: "No Practice Lines",
-        detail: "Generate a scene with lines for you to say.",
+        label: "No Dialogue",
+        detail: "Generate a scene with dialogue to practice.",
         color: Colors.light.error,
         backgroundColor: Colors.light.backgroundElement,
       };
@@ -303,7 +298,11 @@ export default function TeleprompterScreen() {
 
   const interactionHint = dictionaryFeedback
     ? dictionaryFeedback
-    : `Tap your words to jump. Long press any word to open ${DICTIONARY_NAME}.`;
+    : `Tap any word to jump. Long press any word to open ${DICTIONARY_NAME}.`;
+  const statusDetailText =
+    speechError ?? dictionaryFeedback ?? statusMeta.detail;
+  const progressSummary =
+    totalWords > 0 ? `${spokenCount}/${totalWords}` : "No lines";
 
   useEffect(() => {
     if (!isReading) {
@@ -437,6 +436,7 @@ export default function TeleprompterScreen() {
   const handleToggleReading = useCallback(async () => {
     if (isReading) {
       setIsReading(false);
+      setIsCoachPanelExpanded(false);
       setBlinkVisible(true);
       setSpeechError(null);
       await stopListening();
@@ -447,7 +447,7 @@ export default function TeleprompterScreen() {
     setAutoContinueError(null);
 
     if (totalWords === 0) {
-      setSpeechError("This script has no lines for you to practice.");
+      setSpeechError("This script has no dialogue to practice.");
       return;
     }
 
@@ -462,6 +462,7 @@ export default function TeleprompterScreen() {
     }
 
     setBlinkVisible(true);
+    setIsCoachPanelExpanded(false);
     setIsReading(true);
     await startListening();
   }, [
@@ -475,6 +476,7 @@ export default function TeleprompterScreen() {
 
   const handleRestart = useCallback(() => {
     setIsReading(false);
+    setIsCoachPanelExpanded(false);
     setBlinkVisible(true);
     setDictionaryFeedback(null);
     setSpeechError(null);
@@ -486,6 +488,7 @@ export default function TeleprompterScreen() {
 
   const handleBack = useCallback(() => {
     setIsReading(false);
+    setIsCoachPanelExpanded(false);
     setBlinkVisible(true);
     void stopListening();
     router.back();
@@ -570,13 +573,6 @@ export default function TeleprompterScreen() {
       </View>
 
       <View style={styles.content}>
-        <ThemedView type="backgroundContent" style={styles.sceneCard}>
-          <ThemedText type="small" style={styles.sceneLabel}>
-            Scene
-          </ThemedText>
-          <ThemedText style={styles.sceneText}>{scene}</ThemedText>
-        </ThemedView>
-
         <View style={styles.progressBar}>
           <View
             style={[styles.progressFill, { width: `${progressPercent}%` }]}
@@ -584,84 +580,121 @@ export default function TeleprompterScreen() {
         </View>
 
         <ThemedView type="backgroundContent" style={styles.coachPanel}>
-          <View style={styles.coachHeader}>
-            <View
-              style={[
-                styles.statusPill,
-                { backgroundColor: statusMeta.backgroundColor },
-              ]}
-            >
+          <Pressable
+            onPress={() => setIsCoachPanelExpanded((value) => !value)}
+            style={styles.coachSummary}
+            hitSlop={6}
+          >
+            <View style={styles.coachSummaryMain}>
               <View
                 style={[
-                  styles.statusDot,
-                  {
-                    backgroundColor: statusMeta.color,
-                    opacity: isReading ? (blinkVisible ? 1 : 0.45) : 1,
-                  },
+                  styles.statusPill,
+                  { backgroundColor: statusMeta.backgroundColor },
                 ]}
-              />
-              <ThemedText type="smallBold" style={styles.statusText}>
-                {statusMeta.label}
+              >
+                <View
+                  style={[
+                    styles.statusDot,
+                    {
+                      backgroundColor: statusMeta.color,
+                      opacity: isReading ? (blinkVisible ? 1 : 0.45) : 1,
+                    },
+                  ]}
+                />
+                <ThemedText type="smallBold" style={styles.statusText}>
+                  {statusMeta.label}
+                </ThemedText>
+              </View>
+              <ThemedText
+                type="small"
+                style={styles.statusDetail}
+                numberOfLines={1}
+              >
+                {statusDetailText}
               </ThemedText>
             </View>
-            <ThemedText type="small" style={styles.statusDetail}>
-              {speechError ?? statusMeta.detail}
-            </ThemedText>
-          </View>
 
-          <View style={styles.metricRow}>
-            <ThemedView type="backgroundElement" style={styles.metricCard}>
-              <ThemedText type="small" style={styles.metricLabel}>
-                Practiced
+            <View style={styles.coachSummaryMeta}>
+              <ThemedText style={styles.progressSummary}>
+                {progressSummary}
               </ThemedText>
-              <ThemedText type="title" style={styles.metricValue}>
-                {spokenCount}
+              <ThemedText style={styles.expandLabel}>
+                {isCoachPanelExpanded ? "Hide" : "Details"}
               </ThemedText>
-            </ThemedView>
-            <ThemedView type="backgroundElement" style={styles.metricCard}>
-              <ThemedText type="small" style={styles.metricLabel}>
-                Left
-              </ThemedText>
-              <ThemedText type="title" style={styles.metricValue}>
-                {remainingWords}
-              </ThemedText>
-            </ThemedView>
-            <ThemedView type="backgroundElement" style={styles.metricCard}>
-              <ThemedText type="small" style={styles.metricLabel}>
-                Revisit
-              </ThemedText>
-              <ThemedText type="title" style={styles.metricValue}>
-                {corrections.length}
-              </ThemedText>
-            </ThemedView>
-          </View>
+            </View>
+          </Pressable>
 
-          <View style={styles.cueStack}>
-            <ThemedView type="backgroundElement" style={styles.cueCard}>
-              <ThemedText type="small" style={styles.cueLabel}>
-                Current focus · {currentCue.label}
-              </ThemedText>
-              <ThemedText style={styles.cueText}>{currentCue.text}</ThemedText>
-            </ThemedView>
-            <ThemedView type="backgroundElement" style={styles.cueCard}>
-              <ThemedText type="small" style={styles.cueLabel}>
-                Coming up · {nextCue.label}
-              </ThemedText>
-              <ThemedText style={styles.cueText}>{nextCue.text}</ThemedText>
-            </ThemedView>
-          </View>
+          {isCoachPanelExpanded ? (
+            <>
+              <View style={styles.sceneSummary}>
+                <ThemedText type="smallBold" style={styles.sceneLabel}>
+                  Scene
+                </ThemedText>
+                <ThemedText style={styles.sceneText}>{scene}</ThemedText>
+              </View>
 
-          <ThemedView
-            type="backgroundElement"
-            style={styles.interactionHintCard}
-          >
-            <ThemedText type="smallBold" style={styles.interactionHintTitle}>
-              Word actions
-            </ThemedText>
-            <ThemedText type="small" style={styles.interactionHintText}>
-              {interactionHint}
-            </ThemedText>
-          </ThemedView>
+              <View style={styles.metricRow}>
+                <ThemedView type="backgroundElement" style={styles.metricCard}>
+                  <ThemedText type="small" style={styles.metricLabel}>
+                    Practiced
+                  </ThemedText>
+                  <ThemedText type="title" style={styles.metricValue}>
+                    {spokenCount}
+                  </ThemedText>
+                </ThemedView>
+                <ThemedView type="backgroundElement" style={styles.metricCard}>
+                  <ThemedText type="small" style={styles.metricLabel}>
+                    Left
+                  </ThemedText>
+                  <ThemedText type="title" style={styles.metricValue}>
+                    {remainingWords}
+                  </ThemedText>
+                </ThemedView>
+                <ThemedView type="backgroundElement" style={styles.metricCard}>
+                  <ThemedText type="small" style={styles.metricLabel}>
+                    Revisit
+                  </ThemedText>
+                  <ThemedText type="title" style={styles.metricValue}>
+                    {corrections.length}
+                  </ThemedText>
+                </ThemedView>
+              </View>
+
+              <View style={styles.cueStack}>
+                <ThemedView type="backgroundElement" style={styles.cueCard}>
+                  <ThemedText type="small" style={styles.cueLabel}>
+                    Current focus · {currentCue.label}
+                  </ThemedText>
+                  <ThemedText style={styles.cueText}>
+                    {currentCue.text}
+                  </ThemedText>
+                </ThemedView>
+                <ThemedView type="backgroundElement" style={styles.cueCard}>
+                  <ThemedText type="small" style={styles.cueLabel}>
+                    Coming up · {nextCue.label}
+                  </ThemedText>
+                  <ThemedText style={styles.cueText}>
+                    {nextCue.text}
+                  </ThemedText>
+                </ThemedView>
+              </View>
+
+              <ThemedView
+                type="backgroundElement"
+                style={styles.interactionHintCard}
+              >
+                <ThemedText
+                  type="smallBold"
+                  style={styles.interactionHintTitle}
+                >
+                  Word actions
+                </ThemedText>
+                <ThemedText type="small" style={styles.interactionHintText}>
+                  {interactionHint}
+                </ThemedText>
+              </ThemedView>
+            </>
+          ) : null}
         </ThemedView>
 
         <ScrollView
@@ -795,19 +828,19 @@ const styles = StyleSheet.create({
     alignSelf: "center",
     gap: Spacing.md,
   },
-  sceneCard: {
-    padding: Spacing.md,
-    borderRadius: Radius.lg,
-    ...Shadows.card,
-  },
   sceneLabel: {
     color: "#8a6d46",
-    marginBottom: Spacing.xs,
+  },
+  sceneSummary: {
+    borderColor: "rgba(121, 79, 39, 0.12)",
+    borderTopWidth: 1,
+    gap: Spacing.xs,
+    paddingTop: Spacing.md,
   },
   sceneText: {
-    fontSize: 17,
-    lineHeight: 24,
     color: "#794f27",
+    fontSize: 15,
+    lineHeight: 21,
   },
   progressBar: {
     height: 10,
@@ -821,22 +854,40 @@ const styles = StyleSheet.create({
     borderRadius: Radius.pill,
   },
   coachPanel: {
-    padding: Spacing.md,
     borderRadius: Radius.lg,
     gap: Spacing.md,
+    padding: Spacing.md,
     ...Shadows.card,
   },
-  coachHeader: {
-    gap: Spacing.sm,
+  coachSummary: {
+    alignItems: "center",
+    flexDirection: "row",
+    gap: Spacing.md,
+    justifyContent: "space-between",
+  },
+  coachSummaryMain: {
+    flex: 1,
+    gap: Spacing.xs,
+    minWidth: 0,
+  },
+  coachSummaryMeta: {
+    alignItems: "flex-end",
+    flexShrink: 0,
+    gap: 2,
+  },
+  expandLabel: {
+    color: "#19c8b9",
+    fontSize: 13,
+    fontWeight: "800",
   },
   statusPill: {
-    alignSelf: "flex-start",
-    flexDirection: "row",
     alignItems: "center",
+    alignSelf: "flex-start",
+    borderRadius: Radius.pill,
+    flexDirection: "row",
     gap: Spacing.sm,
     paddingHorizontal: Spacing.md,
     paddingVertical: Spacing.sm,
-    borderRadius: Radius.pill,
   },
   statusDot: {
     width: 10,
@@ -848,7 +899,13 @@ const styles = StyleSheet.create({
   },
   statusDetail: {
     color: "#8a6d46",
+    flexShrink: 1,
     lineHeight: 18,
+  },
+  progressSummary: {
+    color: "#794f27",
+    fontSize: 16,
+    fontWeight: "900",
   },
   metricRow: {
     flexDirection: "row",
