@@ -1,5 +1,5 @@
-import React, { createContext, useContext, useState, useCallback } from 'react';
-import { DialogueSegment } from '@/types/dialogue';
+import React, { createContext, useContext, useState, useCallback } from "react";
+import { DialogueSegment } from "@/types/dialogue";
 
 interface AppState {
   apiKey: string;
@@ -19,22 +19,25 @@ interface AppState {
 const AppContext = createContext<AppState | null>(null);
 
 export function AppProvider({ children }: { children: React.ReactNode }) {
-  const [apiKey, setApiKeyState] = useState('');
-  const [scene, setSceneState] = useState('');
+  const [apiKey, setApiKeyState] = useState("");
+  const [scene, setSceneState] = useState("");
   const [segments, setSegmentsState] = useState<DialogueSegment[]>([]);
   const [isGenerating, setIsGenerating] = useState(false);
   const [generationError, setGenerationError] = useState<string | null>(null);
 
   const setApiKey = useCallback((key: string) => setApiKeyState(key), []);
   const setScene = useCallback((s: string) => setSceneState(s), []);
-  const setSegments = useCallback((s: DialogueSegment[]) => setSegmentsState(s), []);
+  const setSegments = useCallback(
+    (s: DialogueSegment[]) => setSegmentsState(s),
+    [],
+  );
 
   const appendSegments = useCallback((newSegments: DialogueSegment[]) => {
     setSegmentsState((prev) => [...prev, ...newSegments]);
   }, []);
 
   const resetSession = useCallback(() => {
-    setSceneState('');
+    setSceneState("");
     setSegmentsState([]);
     setGenerationError(null);
   }, []);
@@ -54,7 +57,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         resetSession,
         setIsGenerating,
         setGenerationError,
-      }}>
+      }}
+    >
       {children}
     </AppContext.Provider>
   );
@@ -62,6 +66,6 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
 export function useApp() {
   const ctx = useContext(AppContext);
-  if (!ctx) throw new Error('useApp must be used within AppProvider');
+  if (!ctx) throw new Error("useApp must be used within AppProvider");
   return ctx;
 }

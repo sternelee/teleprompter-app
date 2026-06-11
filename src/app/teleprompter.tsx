@@ -147,7 +147,9 @@ export default function TeleprompterScreen() {
   const currentPracticePosition = useMemo(
     () =>
       currentWordIndex >= 0
-        ? practiceWords.findIndex((word) => word.globalIndex === currentWordIndex)
+        ? practiceWords.findIndex(
+            (word) => word.globalIndex === currentWordIndex,
+          )
         : -1,
     [currentWordIndex, practiceWords],
   );

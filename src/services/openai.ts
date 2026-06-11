@@ -108,7 +108,9 @@ export async function generateDialogue(
 
   const rawSegments = Array.isArray(parsed.segments) ? parsed.segments : [];
   const segments: DialogueSegment[] = rawSegments
-    .filter((s: { text?: unknown }) => typeof s.text === "string" && s.text.trim())
+    .filter(
+      (s: { text?: unknown }) => typeof s.text === "string" && s.text.trim(),
+    )
     .map((s: { speaker?: string; text: string }) => ({
       id: generateId(),
       speaker: s.speaker === "user" ? "user" : "ai",

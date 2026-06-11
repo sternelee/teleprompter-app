@@ -134,7 +134,8 @@ export function TeleprompterDisplay({
                   const isCurrent =
                     isPracticeSegment && word.globalIndex === currentWordIndex;
                   const isCorrection =
-                    isPracticeSegment && correctionIndexes.has(word.globalIndex);
+                    isPracticeSegment &&
+                    correctionIndexes.has(word.globalIndex);
 
                   return (
                     <Pressable

@@ -205,7 +205,11 @@ export default function HomeScreen() {
                     {index + 1}
                   </ThemedText>
                 </ThemedView>
-                <ThemedText type="default" weight="700" style={styles.stepTitle}>
+                <ThemedText
+                  type="default"
+                  weight="700"
+                  style={styles.stepTitle}
+                >
                   {step.title}
                 </ThemedText>
                 <ThemedText style={styles.stepDetail}>{step.detail}</ThemedText>
@@ -256,7 +260,11 @@ export default function HomeScreen() {
 
           {trimmedScene ? (
             <ThemedView style={styles.previewCard}>
-              <ThemedText type="default" weight="700" style={styles.previewTitle}>
+              <ThemedText
+                type="default"
+                weight="700"
+                style={styles.previewTitle}
+              >
                 Practice preview
               </ThemedText>
               <ThemedText style={styles.previewBody}>

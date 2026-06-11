@@ -1,5 +1,8 @@
-import { ExpoSpeechRecognitionModule, useSpeechRecognitionEvent } from 'expo-speech-recognition';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import {
+  ExpoSpeechRecognitionModule,
+  useSpeechRecognitionEvent,
+} from "expo-speech-recognition";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 type UseSpeechRecognitionOptions = {
   language?: string;
@@ -16,11 +19,11 @@ function formatErrorMessage(error: unknown) {
     return error.message;
   }
 
-  return 'Speech recognition failed. Please try again.';
+  return "Speech recognition failed. Please try again.";
 }
 
 export function useSpeechRecognition({
-  language = 'en-US',
+  language = "en-US",
   onError,
   onResult,
 }: UseSpeechRecognitionOptions) {
@@ -44,22 +47,22 @@ export function useSpeechRecognition({
       setIsListening(false);
       onError?.(message);
     },
-    [clearRestartTimer, onError]
+    [clearRestartTimer, onError],
   );
 
   const requestPermission = useCallback(async () => {
-    const permission = await ExpoSpeechRecognitionModule.requestPermissionsAsync();
+    const permission =
+      await ExpoSpeechRecognitionModule.requestPermissionsAsync();
     setPermissionResponse(permission);
     return permission;
   }, []);
 
   const startListening = useCallback(async () => {
     const granted =
-      permissionResponse?.granted ??
-      (await requestPermission()).granted;
+      permissionResponse?.granted ?? (await requestPermission()).granted;
 
     if (!granted) {
-      emitError('Microphone permission is required to practice speaking.');
+      emitError("Microphone permission is required to practice speaking.");
       return;
     }
 
@@ -77,7 +80,13 @@ export function useSpeechRecognition({
     } catch (error) {
       emitError(formatErrorMessage(error));
     }
-  }, [clearRestartTimer, emitError, language, permissionResponse?.granted, requestPermission]);
+  }, [
+    clearRestartTimer,
+    emitError,
+    language,
+    permissionResponse?.granted,
+    requestPermission,
+  ]);
 
   const stopListening = useCallback(async () => {
     shouldAutoRestartRef.current = false;
@@ -90,22 +99,20 @@ export function useSpeechRecognition({
     }
   }, [clearRestartTimer, emitError]);
 
-  useSpeechRecognitionEvent('start', () => {
+  useSpeechRecognitionEvent("start", () => {
     setIsListening(true);
   });
 
-  useSpeechRecognitionEvent('result', (event) => {
+  useSpeechRecognitionEvent("result", (event) => {
     const transcript =
-      event.results[0]?.transcript ??
-      event.results.at(-1)?.transcript ??
-      '';
+      event.results[0]?.transcript ?? event.results.at(-1)?.transcript ?? "";
 
     if (transcript) {
       onResult(transcript);
     }
   });
 
-  useSpeechRecognitionEvent('end', () => {
+  useSpeechRecognitionEvent("end", () => {
     setIsListening(false);
 
     if (!shouldAutoRestartRef.current) {
@@ -118,8 +125,8 @@ export function useSpeechRecognition({
     }, 250);
   });
 
-  useSpeechRecognitionEvent('error', (event) => {
-    emitError(event.error ?? 'Speech recognition failed. Please try again.');
+  useSpeechRecognitionEvent("error", (event) => {
+    emitError(event.error ?? "Speech recognition failed. Please try again.");
   });
 
   useEffect(() => {

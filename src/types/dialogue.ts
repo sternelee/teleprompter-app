@@ -1,6 +1,6 @@
 export interface DialogueSegment {
   id: string;
-  speaker: 'ai' | 'user';
+  speaker: "ai" | "user";
   text: string;
 }
 
