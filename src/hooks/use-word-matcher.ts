@@ -1,4 +1,4 @@
-import { useState, useCallback, useRef } from "react";
+import { useState, useCallback, useRef, useEffect } from "react";
 import { Word, Correction } from "@/types/dialogue";
 
 function levenshtein(a: string, b: string): number {
@@ -56,11 +56,36 @@ interface UseWordMatcherResult {
   resetProgress: () => void;
 }
 
-export function useWordMatcher(words: Word[]): UseWordMatcherResult {
-  const [currentWordIndex, setCurrentWordIndex] = useState(-1);
-  const [corrections, setCorrections] = useState<Correction[]>([]);
-  const lastMatchedPositionRef = useRef(-1);
+interface UseWordMatcherOptions {
+  initialCurrentWordIndex?: number;
+  initialCorrections?: Correction[];
+}
+
+export function useWordMatcher(
+  words: Word[],
+  options: UseWordMatcherOptions = {},
+): UseWordMatcherResult {
+  const {
+    initialCurrentWordIndex = -1,
+    initialCorrections = [],
+  } = options;
+
+  const initialPosition =
+    initialCurrentWordIndex >= 0
+      ? words.findIndex((word) => word.globalIndex === initialCurrentWordIndex)
+      : -1;
+
+  const [currentWordIndex, setCurrentWordIndex] = useState(
+    initialCurrentWordIndex,
+  );
+  const [corrections, setCorrections] = useState<Correction[]>(
+    initialCorrections,
+  );
+  const lastMatchedPositionRef = useRef(
+    initialPosition >= 0 ? initialPosition : -1,
+  );
   const lastSpokenRef = useRef("");
+  const lastInitialIndexRef = useRef(initialCurrentWordIndex);
 
   const updateProgress = useCallback(
     (spokenText: string) => {
@@ -151,7 +176,27 @@ export function useWordMatcher(words: Word[]): UseWordMatcherResult {
     setCorrections([]);
     lastMatchedPositionRef.current = -1;
     lastSpokenRef.current = "";
+    lastInitialIndexRef.current = -1;
   }, []);
+
+  // Keep internal refs in sync when external initial values change (e.g. loading a session).
+  useEffect(() => {
+    if (initialCurrentWordIndex === lastInitialIndexRef.current) {
+      return;
+    }
+
+    lastInitialIndexRef.current = initialCurrentWordIndex;
+    const position =
+      initialCurrentWordIndex >= 0
+        ? words.findIndex(
+            (word) => word.globalIndex === initialCurrentWordIndex,
+          )
+        : -1;
+    setCurrentWordIndex(initialCurrentWordIndex);
+    lastMatchedPositionRef.current = position >= 0 ? position : -1;
+    setCorrections(initialCorrections);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [initialCurrentWordIndex]);
 
   const jumpToWord = useCallback(
     (wordIndex: number) => {

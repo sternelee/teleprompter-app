@@ -7,11 +7,17 @@ import { ThemedText } from "@/components/themed-text";
 import { ThemedView } from "@/components/themed-view";
 import { Spacing, Radius, Shadows, MaxContentWidth } from "@/constants/theme";
 import { useApp } from "@/contexts/app-context";
+import { generateDialogue } from "@/services/openai";
 
 export default function SettingsScreen() {
   const router = useRouter();
-  const { apiKey, setApiKey } = useApp();
+  const { apiKey, setApiKey, clearStoredApiKey } = useApp();
   const [pressed, setPressed] = useState(false);
+  const [testStatus, setTestStatus] = useState<
+    "idle" | "testing" | "success" | "error"
+  >("idle");
+  const [testMessage, setTestMessage] = useState<string | null>(null);
+  const [clearPressed, setClearPressed] = useState(false);
 
   return (
     <ThemedView style={styles.container}>
@@ -44,12 +50,106 @@ export default function SettingsScreen() {
             placeholder="Paste your DeepSeek API key"
             placeholderTextColor="#c4b89e"
             value={apiKey}
-            onChangeText={setApiKey}
+            onChangeText={(key) => {
+              setApiKey(key);
+              if (testStatus !== "idle") {
+                setTestStatus("idle");
+                setTestMessage(null);
+              }
+            }}
             autoCapitalize="none"
             autoCorrect={false}
             secureTextEntry
           />
+
+          {testMessage ? (
+            <ThemedView
+              style={[
+                styles.testMessageCard,
+                testStatus === "success" && styles.testMessageSuccess,
+                testStatus === "error" && styles.testMessageError,
+              ]}
+            >
+              <ThemedText
+                type="small"
+                style={[
+                  styles.testMessageText,
+                  testStatus === "success" && styles.testMessageTextSuccess,
+                  testStatus === "error" && styles.testMessageTextError,
+                ]}
+              >
+                {testMessage}
+              </ThemedText>
+            </ThemedView>
+          ) : null}
         </ThemedView>
+
+        <Pressable
+          disabled={!apiKey || testStatus === "testing"}
+          onPress={async () => {
+            setTestStatus("testing");
+            setTestMessage("Checking connection…");
+            try {
+              await generateDialogue(
+                "A one-line English greeting",
+                apiKey,
+              );
+              setTestStatus("success");
+              setTestMessage("Key is valid and DeepSeek is reachable.");
+            } catch (error) {
+              setTestStatus("error");
+              setTestMessage(
+                error instanceof Error
+                  ? error.message
+                  : "Could not verify the key. Please check it and try again.",
+              );
+            }
+          }}
+          onPressIn={() => setPressed(true)}
+          onPressOut={() => setPressed(false)}
+        >
+          <ThemedView
+            type="primary"
+            style={[
+              styles.testButton,
+              pressed && styles.doneButtonActive,
+              (!apiKey || testStatus === "testing") && styles.disabledButton,
+            ]}
+          >
+            <ThemedText type="smallBold" style={styles.doneButtonText}>
+              {testStatus === "testing"
+                ? "Testing…"
+                : "Test connection"}
+            </ThemedText>
+          </ThemedView>
+        </Pressable>
+
+        {apiKey ? (
+          <Pressable
+            onPress={() => {
+              clearStoredApiKey();
+              setTestStatus("idle");
+              setTestMessage(null);
+            }}
+            onPressIn={() => setClearPressed(true)}
+            onPressOut={() => setClearPressed(false)}
+          >
+            <ThemedView
+              type="backgroundElement"
+              style={[
+                styles.clearButton,
+                clearPressed && styles.clearButtonActive,
+              ]}
+            >
+              <ThemedText
+                type="smallBold"
+                style={styles.clearButtonText}
+              >
+                Clear stored key
+              </ThemedText>
+            </ThemedView>
+          </Pressable>
+        ) : null}
 
         <Pressable
           onPress={() => router.back()}
@@ -122,6 +222,53 @@ const styles = StyleSheet.create({
   },
   cardTitle: {
     color: "#794f27",
+    letterSpacing: 0.02,
+  },
+  testButton: {
+    paddingVertical: Spacing.md,
+    borderRadius: Radius.pill,
+    alignItems: "center",
+    ...Shadows.btn,
+  },
+  disabledButton: {
+    opacity: 0.6,
+  },
+  testMessageCard: {
+    borderRadius: Radius.base,
+    paddingHorizontal: Spacing.md,
+    paddingVertical: Spacing.sm,
+    marginTop: Spacing.sm,
+  },
+  testMessageSuccess: {
+    backgroundColor: "rgba(111, 186, 44, 0.12)",
+  },
+  testMessageError: {
+    backgroundColor: "#fff0f0",
+  },
+  testMessageText: {
+    fontSize: 13,
+    lineHeight: 18,
+  },
+  testMessageTextSuccess: {
+    color: "#4f7f2c",
+  },
+  testMessageTextError: {
+    color: "#e05a5a",
+  },
+  clearButton: {
+    paddingVertical: Spacing.md,
+    borderRadius: Radius.pill,
+    alignItems: "center",
+    ...Shadows.btn,
+  },
+  clearButtonActive: {
+    transform: [{ translateY: 2 }],
+    ...Shadows.btnActive,
+  },
+  clearButtonText: {
+    color: "#794f27",
+    fontWeight: "700",
+    fontSize: 16,
     letterSpacing: 0.02,
   },
   input: {

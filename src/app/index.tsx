@@ -17,6 +17,7 @@ import { ThemedView } from "@/components/themed-view";
 import { Colors, Radius, Shadows, Spacing } from "@/constants/theme";
 import { useApp } from "@/contexts/app-context";
 import { generateDialogue } from "@/services/openai";
+import { formatRelativeTime } from "@/utils/time";
 
 const MAX_CONTENT_WIDTH = 760;
 
@@ -109,11 +110,14 @@ export default function HomeScreen() {
     apiKey,
     generationError,
     isGenerating,
+    isLoadingApiKey,
     scene,
+    sessions,
+    startNewSession,
+    loadSession,
     setGenerationError,
     setIsGenerating,
     setScene,
-    setSegments,
   } = useApp();
   const { width } = useWindowDimensions();
   const isCompact = width < 640;
@@ -180,7 +184,7 @@ export default function HomeScreen() {
 
     try {
       const nextSegments = await generateDialogue(nextScene, apiKey);
-      setSegments(nextSegments);
+      startNewSession(nextScene, nextSegments);
       router.push("/teleprompter");
     } catch (error) {
       setGenerationError(
@@ -196,7 +200,7 @@ export default function HomeScreen() {
     setGenerationError,
     setIsGenerating,
     setScene,
-    setSegments,
+    startNewSession,
     trimmedScene,
   ]);
 
@@ -251,11 +255,14 @@ export default function HomeScreen() {
     }
 
     if (activeTab === "key") {
+      if (isLoadingApiKey) {
+        return "Loading key…";
+      }
       return hasApiKey ? "Review setup" : "Add DeepSeek key";
     }
 
     return isGenerating ? "Generating dialogue..." : "Start speaking practice";
-  }, [activeTab, hasApiKey, isGenerating]);
+  }, [activeTab, hasApiKey, isGenerating, isLoadingApiKey]);
 
   return (
     <ThemedView style={styles.screen}>
@@ -454,15 +461,95 @@ export default function HomeScreen() {
                         ))}
                       </View>
                     </View>
+
+                    {sessions.length > 0 ? (
+                      <View style={styles.sessionsBlock}>
+                        <View style={styles.sectionHeader}>
+                          <ThemedText style={styles.sectionLabel}>
+                            Recent sessions
+                          </ThemedText>
+                          <ThemedText style={styles.sessionCount}>
+                            {sessions.length}
+                          </ThemedText>
+                        </View>
+
+                        <ScrollView
+                          horizontal
+                          showsHorizontalScrollIndicator={false}
+                          contentContainerStyle={styles.sessionsContent}
+                        >
+                          {sessions.map((session) => {
+                            const totalWords = session.segments.reduce(
+                              (sum, segment) =>
+                                sum + segment.text.split(/\s+/).filter(Boolean).length,
+                              0,
+                            );
+                            const practiced =
+                              session.currentWordIndex >= 0
+                                ? session.segments
+                                    .flatMap((s) => s.text.split(/\s+/).filter(Boolean))
+                                    .findIndex(
+                                      (_, index) => index > session.currentWordIndex,
+                                    )
+                                : 0;
+                            const progress =
+                              totalWords > 0
+                                ? Math.min(
+                                    100,
+                                    Math.round((practiced / totalWords) * 100),
+                                  )
+                                : 0;
+
+                            return (
+                              <Pressable
+                                key={session.id}
+                                onPress={() => {
+                                  loadSession(session);
+                                  router.push("/teleprompter");
+                                }}
+                                style={styles.sessionCardPressable}
+                              >
+                                <ThemedView style={styles.sessionCard}>
+                                  <ThemedText
+                                    style={styles.sessionTitle}
+                                    numberOfLines={2}
+                                  >
+                                    {session.title || session.scene}
+                                  </ThemedText>
+                                  <View style={styles.sessionMeta}>
+                                    <ThemedText style={styles.sessionTime}>
+                                      {formatRelativeTime(session.updatedAt)}
+                                    </ThemedText>
+                                    <ThemedText style={styles.sessionProgress}>
+                                      {progress}%
+                                    </ThemedText>
+                                  </View>
+                                  <View style={styles.sessionProgressBar}>
+                                    <View
+                                      style={[
+                                        styles.sessionProgressFill,
+                                        { width: `${progress}%` },
+                                      ]}
+                                    />
+                                  </View>
+                                </ThemedView>
+                              </Pressable>
+                            );
+                          })}
+                        </ScrollView>
+                      </View>
+                    ) : null}
                   </View>
                 ) : null}
 
                 {activeTab === "key" ? (
                   <View style={styles.stepBody}>
                     <ThemedText style={styles.bodyText}>
-                      {hasApiKey
-                        ? "Your DeepSeek key is ready for this session."
-                        : "Add a DeepSeek API key once, then return here to generate role-play lines."}
+                      {isLoadingApiKey
+                        ? "Checking for a saved key on this device…"
+                        : hasApiKey
+                          ? "Your DeepSeek key is saved on this device and ready to use."
+                          : "Add a DeepSeek API key once, then return here to generate role-play lines."}
                     </ThemedText>
 
                     <ThemedView style={styles.keyStatusCard}>
@@ -876,6 +963,72 @@ const styles = StyleSheet.create({
     lineHeight: 24,
     minHeight: 132,
   },
+  sessionsBlock: {
+    gap: Spacing.sm,
+    marginTop: Spacing.sm,
+  },
+  sessionsContent: {
+    gap: Spacing.sm,
+    paddingRight: Spacing.lg,
+  },
+  sectionHeader: {
+    alignItems: "center",
+    flexDirection: "row",
+    gap: Spacing.sm,
+  },
+  sessionCount: {
+    backgroundColor: "rgba(121, 79, 39, 0.1)",
+    borderRadius: Radius.pill,
+    color: Colors.light.text,
+    fontSize: 12,
+    fontWeight: "800",
+    paddingHorizontal: Spacing.sm,
+    paddingVertical: 2,
+  },
+  sessionCardPressable: {
+    width: 220,
+  },
+  sessionCard: {
+    backgroundColor: "#fff9ef",
+    borderColor: "rgba(121, 79, 39, 0.12)",
+    borderRadius: Radius.base,
+    borderWidth: 1,
+    gap: Spacing.sm,
+    padding: Spacing.md,
+  },
+  sessionTitle: {
+    color: Colors.light.text,
+    fontSize: 15,
+    fontWeight: "700",
+    lineHeight: 21,
+    minHeight: 42,
+  },
+  sessionMeta: {
+    alignItems: "center",
+    flexDirection: "row",
+    justifyContent: "space-between",
+  },
+  sessionTime: {
+    color: "rgba(121, 79, 39, 0.62)",
+    fontSize: 12,
+    fontWeight: "700",
+  },
+  sessionProgress: {
+    color: Colors.light.primary,
+    fontSize: 12,
+    fontWeight: "900",
+  },
+  sessionProgressBar: {
+    backgroundColor: "rgba(121, 79, 39, 0.1)",
+    borderRadius: Radius.pill,
+    height: 6,
+    overflow: "hidden",
+  },
+  sessionProgressFill: {
+    backgroundColor: Colors.light.spoken,
+    borderRadius: Radius.pill,
+    height: "100%",
+  },
   screen: {
     flex: 1,
   },
@@ -998,6 +1151,7 @@ const styles = StyleSheet.create({
     borderRadius: Radius.lg,
     flexDirection: "row",
     gap: Spacing.xs,
+    overflow: "hidden",
     padding: Spacing.xs,
     width: "100%",
   },
@@ -1024,6 +1178,7 @@ const styles = StyleSheet.create({
   },
   tabItemActive: {
     backgroundColor: Colors.light.backgroundContent,
+    borderRadius: Radius.lg,
     ...Shadows.inputSmall,
   },
   tabNumber: {

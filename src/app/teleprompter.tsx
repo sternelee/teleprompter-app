@@ -16,11 +16,11 @@ import {
 } from "@/constants/theme";
 import { useApp } from "@/contexts/app-context";
 import { useSpeechRecognition } from "@/hooks/use-speech-recognition";
+import { useWordSpeech } from "@/hooks/use-word-speech";
 import { normalizeWord, useWordMatcher } from "@/hooks/use-word-matcher";
 import { generateDialogue } from "@/services/openai";
 import type { Word } from "@/types/dialogue";
 
-const AUTO_CONTINUE_THRESHOLD = 8;
 const CUE_PREVIEW_WORDS = 8;
 const DICTIONARY_NAME = "Cambridge Dictionary";
 
@@ -54,6 +54,9 @@ export default function TeleprompterScreen() {
     segments,
     isGenerating,
     generationError,
+    currentSessionId,
+    sessions,
+    saveCurrentSession,
     appendSegments,
   } = useApp();
 
@@ -74,6 +77,7 @@ export default function TeleprompterScreen() {
   const [viewportHeight, setViewportHeight] = useState(0);
   const scrollViewRef = useRef<ScrollView>(null);
   const fetchingRef = useRef(false);
+  const lastAutoContinueSegmentIdRef = useRef<string | null>(null);
   const segmentOffsetsRef = useRef<Record<number, number>>({});
 
   const allWords = useMemo(() => {
@@ -109,13 +113,36 @@ export default function TeleprompterScreen() {
 
   const practiceWords = allWords;
 
+  const initialMatcherState = useMemo(() => {
+    if (!currentSessionId) {
+      return { currentWordIndex: -1, corrections: [] };
+    }
+
+    const session = sessions.find((s) => s.id === currentSessionId);
+    return {
+      currentWordIndex: session?.currentWordIndex ?? -1,
+      corrections: session?.corrections ?? [],
+    };
+  }, [currentSessionId, sessions]);
+
   const {
     currentWordIndex,
     corrections,
     jumpToWord,
     updateProgress,
     resetProgress,
-  } = useWordMatcher(practiceWords);
+  } = useWordMatcher(practiceWords, {
+    initialCurrentWordIndex: initialMatcherState.currentWordIndex,
+    initialCorrections: initialMatcherState.corrections,
+  });
+
+  // Persist progress back to AsyncStorage whenever it changes.
+  useEffect(() => {
+    if (!currentSessionId) return;
+
+    saveCurrentSession({ currentWordIndex, corrections });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentWordIndex, corrections.length, currentSessionId]);
 
   const handleSpeechResult = useCallback(
     (text: string) => {
@@ -128,6 +155,8 @@ export default function TeleprompterScreen() {
     setSpeechError(message);
     setIsReading(false);
   }, []);
+
+  const { speak: speakWord, speakingWord } = useWordSpeech();
 
   const {
     isListening,
@@ -168,6 +197,10 @@ export default function TeleprompterScreen() {
       ? practiceWords[currentPracticePosition]
       : practiceWords[0]);
   const activeSegmentIndex = activeWord?.segmentIndex ?? -1;
+  const finalSegment =
+    segments.length > 0 ? segments[segments.length - 1] : undefined;
+  const isOnFinalSegment =
+    activeSegmentIndex >= 0 && activeSegmentIndex === segments.length - 1;
   const nextPracticeWord =
     activeSegmentIndex >= 0
       ? practiceWords.find(
@@ -381,22 +414,23 @@ export default function TeleprompterScreen() {
   ]);
 
   useEffect(() => {
-    const wordsRemaining = remainingWords;
-
     if (
       !scene ||
       !apiKey ||
+      !finalSegment ||
+      !isOnFinalSegment ||
+      remainingWords > 8 ||
+      spokenCount === 0 ||
       isGenerating ||
       isContinuing ||
       fetchingRef.current ||
-      spokenCount === 0 ||
-      wordsRemaining > AUTO_CONTINUE_THRESHOLD ||
-      wordsRemaining <= 0
+      lastAutoContinueSegmentIdRef.current === finalSegment.id
     ) {
       return;
     }
 
     fetchingRef.current = true;
+    lastAutoContinueSegmentIdRef.current = finalSegment.id;
     setAutoContinueError(null);
     setIsContinuing(true);
     void generateDialogue(scene, apiKey, segments)
@@ -420,8 +454,10 @@ export default function TeleprompterScreen() {
   }, [
     appendSegments,
     apiKey,
+    finalSegment,
     isContinuing,
     isGenerating,
+    isOnFinalSegment,
     remainingWords,
     scene,
     segments,
@@ -483,6 +519,7 @@ export default function TeleprompterScreen() {
     setSpeechError(null);
     setAutoContinueError(null);
     void stopListening();
+    lastAutoContinueSegmentIdRef.current = null;
     resetProgress();
     scrollViewRef.current?.scrollTo({ y: 0, animated: true });
   }, [resetProgress, stopListening]);
@@ -498,6 +535,13 @@ export default function TeleprompterScreen() {
   const handleSegmentLayout = useCallback((segmentIndex: number, y: number) => {
     segmentOffsetsRef.current[segmentIndex] = y;
   }, []);
+
+  const handleWordSpeech = useCallback(
+    (word: Word) => {
+      speakWord(word.text);
+    },
+    [speakWord],
+  );
 
   const handleWordPress = useCallback(
     async (word: Word) => {
@@ -724,7 +768,9 @@ export default function TeleprompterScreen() {
               onSegmentLayout={handleSegmentLayout}
               onWordLongPress={handleWordLongPress}
               onWordPress={handleWordPress}
+              onWordSpeech={handleWordSpeech}
               segments={segments}
+              speakingWord={speakingWord}
               spokenThroughWordIndex={currentWordIndex}
               words={allWords}
             />
@@ -809,7 +855,7 @@ export default function TeleprompterScreen() {
 
 const styles = StyleSheet.create({
   container: {
-    backgroundColor: "#f6f3e8",
+    backgroundColor: Colors.light.background,
     flex: 1,
   },
   safeArea: {
@@ -828,13 +874,13 @@ const styles = StyleSheet.create({
     alignSelf: "center",
   },
   backButton: {
-    color: "#19c8b9",
+    color: Colors.light.primary,
     fontSize: 18,
   },
   title: {
     fontSize: 26,
     fontWeight: "700",
-    color: "#794f27",
+    color: Colors.light.text,
   },
   content: {
     flex: 1,
@@ -844,7 +890,7 @@ const styles = StyleSheet.create({
     gap: Spacing.md,
   },
   sceneLabel: {
-    color: "#8a6d46",
+    color: Colors.light.textMuted,
   },
   sceneSummary: {
     borderColor: "rgba(121, 79, 39, 0.12)",
@@ -853,19 +899,19 @@ const styles = StyleSheet.create({
     paddingTop: Spacing.md,
   },
   sceneText: {
-    color: "#794f27",
+    color: Colors.light.text,
     fontSize: 15,
     lineHeight: 21,
   },
   progressBar: {
     height: 10,
-    backgroundColor: "#e5dbc8",
+    backgroundColor: Colors.light.backgroundElement,
     borderRadius: Radius.pill,
     overflow: "hidden",
   },
   progressFill: {
     height: "100%",
-    backgroundColor: "#6fba2c",
+    backgroundColor: Colors.light.spoken,
     borderRadius: Radius.pill,
   },
   coachPanel: {
@@ -891,7 +937,7 @@ const styles = StyleSheet.create({
     gap: 2,
   },
   expandLabel: {
-    color: "#19c8b9",
+    color: Colors.light.primary,
     fontSize: 13,
     fontWeight: "800",
   },
@@ -910,15 +956,15 @@ const styles = StyleSheet.create({
     borderRadius: Radius.pill,
   },
   statusText: {
-    color: "#794f27",
+    color: Colors.light.text,
   },
   statusDetail: {
-    color: "#8a6d46",
+    color: Colors.light.textMuted,
     flexShrink: 1,
     lineHeight: 18,
   },
   progressSummary: {
-    color: "#794f27",
+    color: Colors.light.text,
     fontSize: 16,
     fontWeight: "900",
   },
@@ -934,10 +980,10 @@ const styles = StyleSheet.create({
     gap: Spacing.xs,
   },
   metricLabel: {
-    color: "#8a6d46",
+    color: Colors.light.textMuted,
   },
   metricValue: {
-    color: "#794f27",
+    color: Colors.light.text,
     fontSize: 24,
   },
   cueStack: {
@@ -950,10 +996,10 @@ const styles = StyleSheet.create({
     gap: Spacing.xs,
   },
   cueLabel: {
-    color: "#8a6d46",
+    color: Colors.light.textMuted,
   },
   cueText: {
-    color: "#794f27",
+    color: Colors.light.text,
     fontSize: 15,
     lineHeight: 22,
   },
@@ -964,11 +1010,11 @@ const styles = StyleSheet.create({
     paddingVertical: Spacing.sm,
   },
   interactionHintText: {
-    color: "#8a6d46",
+    color: Colors.light.textMuted,
     lineHeight: 18,
   },
   interactionHintTitle: {
-    color: "#794f27",
+    color: Colors.light.text,
   },
   teleprompterContainer: {
     flex: 1,
@@ -977,7 +1023,7 @@ const styles = StyleSheet.create({
     paddingBottom: Spacing.xl,
   },
   errorText: {
-    color: "#e05a5a",
+    color: Colors.light.error,
     textAlign: "center",
   },
   controls: {
@@ -1014,7 +1060,7 @@ const styles = StyleSheet.create({
     ...Shadows.btnActive,
   },
   secondaryButtonText: {
-    color: "#794f27",
+    color: Colors.light.text,
   },
   correctionsBox: {
     padding: Spacing.md,
@@ -1023,10 +1069,10 @@ const styles = StyleSheet.create({
   },
   correctionsTitle: {
     marginBottom: Spacing.sm,
-    color: "#794f27",
+    color: Colors.light.text,
   },
   correctionText: {
-    color: "#8a6d46",
+    color: Colors.light.textMuted,
     marginBottom: 4,
   },
 });

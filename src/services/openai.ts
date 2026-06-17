@@ -11,16 +11,20 @@ function buildPrompt(
   scene: string,
   previousSegments?: DialogueSegment[],
 ): string {
+  const hasPreviousDialogue = Boolean(previousSegments?.length);
   const previous = previousSegments?.length
     ? `\n\nPrevious dialogue:\n${previousSegments.map((s) => `${s.speaker === "ai" ? "Partner" : "User"}: ${s.text}`).join("\n")}`
     : "";
+  const lengthRule = hasPreviousDialogue
+    ? "Continue with 8-12 new lines (4-6 new exchanges)"
+    : "Be 10-14 lines (5-7 exchanges)";
 
   return `You are creating English speaking practice dialogue for a language learner.
 
 Scene: ${scene}${previous}
 
 Generate a natural English dialogue for this scene. The dialogue should:
-- Be 8-12 lines (4-6 exchanges)
+- ${lengthRule}
 - Use practical, everyday English
 - Be appropriate for intermediate English learners
 - Include both the user's lines and the other person's lines
@@ -28,7 +32,8 @@ Generate a natural English dialogue for this scene. The dialogue should:
 - The user's lines should be useful things the learner can practice speaking aloud
 - Keep each line short enough to say in one breath
 - Do not include stage directions, translations, markdown, or explanations
-- If previous dialogue is provided, continue after the final line without repeating earlier lines
+- If previous dialogue is provided, preserve the same context, roles, topic, details, tone, and unresolved goal
+- If previous dialogue is provided, continue directly after the final line without repeating, summarizing, or restarting earlier lines
 
 Return ONLY a JSON object in this exact format:
 {

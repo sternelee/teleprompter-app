@@ -24,7 +24,9 @@ type TeleprompterDisplayProps = {
   onSegmentLayout?: (segmentIndex: number, y: number) => void;
   onWordLongPress?: (word: Word) => void;
   onWordPress?: (word: Word) => void;
+  onWordSpeech?: (word: Word) => void;
   segments: DialogueSegment[];
+  speakingWord?: string | null;
   spokenThroughWordIndex?: number;
   words: Word[];
 };
@@ -40,7 +42,9 @@ export function TeleprompterDisplay({
   onSegmentLayout,
   onWordLongPress,
   onWordPress,
+  onWordSpeech,
   segments,
+  speakingWord,
   spokenThroughWordIndex = -1,
   words,
 }: TeleprompterDisplayProps) {
@@ -157,6 +161,21 @@ export function TeleprompterDisplay({
                       >
                         {word.text}
                       </ThemedText>
+                      {isCurrent && onWordSpeech ? (
+                        <Pressable
+                          hitSlop={{ top: 4, bottom: 8, left: 8, right: 8 }}
+                          onPress={() => onWordSpeech(word)}
+                          style={styles.speechTrigger}
+                        >
+                          <View
+                            style={[
+                              styles.speechBar,
+                              speakingWord === word.text &&
+                                styles.speechBarActive,
+                            ]}
+                          />
+                        </Pressable>
+                      ) : null}
                     </Pressable>
                   );
                 })}
@@ -262,6 +281,21 @@ const styles = StyleSheet.create({
   },
   wordSpoken: {
     color: Colors.light.spoken,
+  },
+  speechTrigger: {
+    alignItems: "center",
+    height: 8,
+    justifyContent: "center",
+    marginTop: 2,
+  },
+  speechBar: {
+    backgroundColor: "rgba(255, 255, 255, 0.35)",
+    borderRadius: 1,
+    height: 2,
+    width: "70%",
+  },
+  speechBarActive: {
+    backgroundColor: "rgba(255, 255, 255, 0.75)",
   },
   wordsRow: {
     flexDirection: "row",
