@@ -615,7 +615,11 @@ export default function TeleprompterScreen() {
           <Pressable onPress={handleBack} hitSlop={8}>
             <ThemedText style={styles.backButton}>← Back</ThemedText>
           </Pressable>
-          <ThemedText style={styles.title}>Teleprompter Practice</ThemedText>
+          <View style={styles.titleWrapper}>
+            <ThemedText style={styles.title} numberOfLines={1}>
+              Teleprompter Practice
+            </ThemedText>
+          </View>
         </View>
 
         <View style={styles.content}>
@@ -872,13 +876,19 @@ const styles = StyleSheet.create({
     maxWidth: MaxContentWidth,
     width: "100%",
     alignSelf: "center",
+    gap: Spacing.sm,
   },
   backButton: {
     color: Colors.light.primary,
-    fontSize: 18,
+    fontSize: 16,
+    flexShrink: 0,
+  },
+  titleWrapper: {
+    flex: 1,
+    alignItems: "flex-end",
   },
   title: {
-    fontSize: 26,
+    fontSize: 20,
     fontWeight: "700",
     color: Colors.light.text,
   },

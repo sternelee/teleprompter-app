@@ -266,16 +266,17 @@ export default function HomeScreen() {
 
   return (
     <ThemedView style={styles.screen}>
-      <SafeAreaView style={styles.safeArea}>
+      <SafeAreaView style={[styles.safeArea, { backgroundColor: Colors.light.background }]}>
         <KeyboardAvoidingView
           behavior={Platform.OS === "ios" ? "padding" : undefined}
-          style={styles.keyboardView}
+          style={[styles.keyboardView, { backgroundColor: Colors.light.background }]}
         >
           <ScrollView
             contentContainerStyle={[
               styles.scrollContent,
               isCompact && styles.scrollContentCompact,
             ]}
+            style={{ backgroundColor: Colors.light.background }}
             keyboardShouldPersistTaps="handled"
             showsVerticalScrollIndicator={false}
           >

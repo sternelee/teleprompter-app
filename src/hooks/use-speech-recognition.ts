@@ -2,6 +2,7 @@ import {
   ExpoSpeechRecognitionModule,
   useSpeechRecognitionEvent,
 } from "expo-speech-recognition";
+import { Platform } from "react-native";
 import { useCallback, useEffect, useRef, useState } from "react";
 
 type UseSpeechRecognitionOptions = {
@@ -32,6 +33,8 @@ export function useSpeechRecognition({
   const [isListening, setIsListening] = useState(false);
   const shouldAutoRestartRef = useRef(false);
   const restartTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const transcriptTallyRef = useRef("");
+  const isRestartingRef = useRef(false);
 
   const clearRestartTimer = useCallback(() => {
     if (restartTimerRef.current) {
@@ -57,6 +60,35 @@ export function useSpeechRecognition({
     return permission;
   }, []);
 
+  const doStart = useCallback(async () => {
+    if (isRestartingRef.current) {
+      return;
+    }
+    isRestartingRef.current = true;
+
+    try {
+      await ExpoSpeechRecognitionModule.start({
+        addsPunctuation: false,
+        continuous: true,
+        interimResults: true,
+        lang: language,
+        maxAlternatives: 1,
+        androidIntentOptions: Platform.OS === "android" ? {
+          EXTRA_SPEECH_INPUT_COMPLETE_SILENCE_LENGTH_MILLIS: 30000,
+          EXTRA_SPEECH_INPUT_POSSIBLY_COMPLETE_SILENCE_LENGTH_MILLIS: 15000,
+          EXTRA_SPEECH_INPUT_MINIMUM_LENGTH_MILLIS: 5000,
+        } : undefined,
+      });
+    } catch (error) {
+      emitError(formatErrorMessage(error));
+    } finally {
+      // Give a small buffer before allowing another start
+      setTimeout(() => {
+        isRestartingRef.current = false;
+      }, 500);
+    }
+  }, [emitError, language]);
+
   const startListening = useCallback(async () => {
     const granted =
       permissionResponse?.granted === true
@@ -70,29 +102,15 @@ export function useSpeechRecognition({
 
     shouldAutoRestartRef.current = true;
     clearRestartTimer();
+    transcriptTallyRef.current = "";
 
-    try {
-      await ExpoSpeechRecognitionModule.start({
-        addsPunctuation: false,
-        continuous: true,
-        interimResults: true,
-        lang: language,
-        maxAlternatives: 1,
-      });
-    } catch (error) {
-      emitError(formatErrorMessage(error));
-    }
-  }, [
-    clearRestartTimer,
-    emitError,
-    language,
-    permissionResponse?.granted,
-    requestPermission,
-  ]);
+    await doStart();
+  }, [clearRestartTimer, doStart, emitError, permissionResponse?.granted, requestPermission]);
 
   const stopListening = useCallback(async () => {
     shouldAutoRestartRef.current = false;
     clearRestartTimer();
+    transcriptTallyRef.current = "";
 
     try {
       await ExpoSpeechRecognitionModule.stop();
@@ -109,8 +127,15 @@ export function useSpeechRecognition({
     const transcript =
       event.results[0]?.transcript ?? event.results.at(-1)?.transcript ?? "";
 
-    if (transcript) {
-      onResult(transcript);
+    if (!transcript) return;
+
+    // On Android, after a restart, the transcript is new text only.
+    // We need to accumulate final results and prepend them to interim results.
+    if (event.isFinal) {
+      transcriptTallyRef.current += transcript + " ";
+      onResult(transcriptTallyRef.current.trim());
+    } else {
+      onResult((transcriptTallyRef.current + transcript).trim());
     }
   });
 
@@ -123,11 +148,15 @@ export function useSpeechRecognition({
 
     clearRestartTimer();
     restartTimerRef.current = setTimeout(() => {
-      void startListening();
-    }, 250);
+      void doStart();
+    }, 400);
   });
 
   useSpeechRecognitionEvent("error", (event) => {
+    // "no-speech" is common when user pauses; auto-restart handles it.
+    if (event.error === "no-speech" && shouldAutoRestartRef.current) {
+      return;
+    }
     emitError(event.error ?? "Speech recognition failed. Please try again.");
   });
 
