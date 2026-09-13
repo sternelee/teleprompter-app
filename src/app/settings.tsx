@@ -1,54 +1,87 @@
-import { useState } from "react";
+import { useRouter } from "expo-router";
+import { useMemo, useState } from "react";
 import { Pressable, StyleSheet, TextInput, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { useRouter } from "expo-router";
 
 import { ThemedText } from "@/components/themed-text";
 import { ThemedView } from "@/components/themed-view";
-import { Spacing, Radius, Shadows, MaxContentWidth } from "@/constants/theme";
+import {
+  createShadows,
+  MaxContentWidth,
+  Radius,
+  Spacing,
+  type ThemePalette,
+} from "@/constants/theme";
 import { useApp } from "@/contexts/app-context";
+import { useTheme } from "@/hooks/use-theme";
+import { useI18n } from "@/i18n";
 import { generateDialogue } from "@/services/openai";
 
 export default function SettingsScreen() {
   const router = useRouter();
-  const { apiKey, setApiKey, clearStoredApiKey } = useApp();
+  const {
+    apiKey,
+    setApiKey,
+    clearStoredApiKey,
+    sessions,
+    clearAllSessions,
+  } = useApp();
+  const { t, language, setLanguage } = useI18n();
+  const theme = useTheme();
+  const styles = useMemo(() => createStyles(theme), [theme]);
   const [pressed, setPressed] = useState(false);
   const [testStatus, setTestStatus] = useState<
     "idle" | "testing" | "success" | "error"
   >("idle");
   const [testMessage, setTestMessage] = useState<string | null>(null);
   const [clearPressed, setClearPressed] = useState(false);
+  const [isClearingHistory, setIsClearingHistory] = useState(false);
+
+  const handleTestConnection = async () => {
+    setTestStatus("testing");
+    setTestMessage(t("settings.checking"));
+
+    try {
+      await generateDialogue("A one-line English greeting", apiKey);
+      setTestStatus("success");
+      setTestMessage(t("settings.testSuccess"));
+    } catch (error) {
+      setTestStatus("error");
+      setTestMessage(
+        error instanceof Error ? error.message : t("settings.testFailed"),
+      );
+    }
+  };
 
   return (
     <ThemedView style={styles.container}>
       <SafeAreaView style={styles.safeArea}>
         <View style={styles.header}>
-          <Pressable onPress={() => router.back()}>
+          <Pressable onPress={() => router.back()} hitSlop={8}>
             <ThemedText type="link" style={styles.backLink}>
-              ← Back
+              {t("common.back")}
             </ThemedText>
           </Pressable>
           <ThemedText type="heading" style={styles.title}>
-            Settings
+            {t("settings.title")}
           </ThemedText>
-          <View style={{ width: 50 }} />
+          <View style={styles.headerSpacer} />
         </View>
 
         <ThemedView type="backgroundContent" style={styles.card}>
           <View style={styles.iconRow}>
             <ThemedText style={styles.keyBadge}>KEY</ThemedText>
             <ThemedText type="smallBold" style={styles.cardTitle}>
-              DeepSeek API Key
+              {t("settings.apiKeyTitle")}
             </ThemedText>
           </View>
           <ThemedText type="small" themeColor="textSecondary">
-            Your API key is stored only in memory and never sent to any server
-            other than DeepSeek.
+            {t("settings.apiKeyNote")}
           </ThemedText>
           <TextInput
             style={styles.input}
-            placeholder="Paste your DeepSeek API key"
-            placeholderTextColor="#c4b89e"
+            placeholder={t("settings.apiKeyPlaceholder")}
+            placeholderTextColor={theme.placeholder}
             value={apiKey}
             onChangeText={(key) => {
               setApiKey(key);
@@ -86,25 +119,7 @@ export default function SettingsScreen() {
 
         <Pressable
           disabled={!apiKey || testStatus === "testing"}
-          onPress={async () => {
-            setTestStatus("testing");
-            setTestMessage("Checking connection…");
-            try {
-              await generateDialogue(
-                "A one-line English greeting",
-                apiKey,
-              );
-              setTestStatus("success");
-              setTestMessage("Key is valid and DeepSeek is reachable.");
-            } catch (error) {
-              setTestStatus("error");
-              setTestMessage(
-                error instanceof Error
-                  ? error.message
-                  : "Could not verify the key. Please check it and try again.",
-              );
-            }
-          }}
+          onPress={handleTestConnection}
           onPressIn={() => setPressed(true)}
           onPressOut={() => setPressed(false)}
         >
@@ -118,8 +133,8 @@ export default function SettingsScreen() {
           >
             <ThemedText type="smallBold" style={styles.doneButtonText}>
               {testStatus === "testing"
-                ? "Testing…"
-                : "Test connection"}
+                ? t("settings.testing")
+                : t("settings.testConnection")}
             </ThemedText>
           </ThemedView>
         </Pressable>
@@ -141,11 +156,91 @@ export default function SettingsScreen() {
                 clearPressed && styles.clearButtonActive,
               ]}
             >
-              <ThemedText
-                type="smallBold"
-                style={styles.clearButtonText}
-              >
-                Clear stored key
+              <ThemedText type="smallBold" style={styles.clearButtonText}>
+                {t("settings.clearKey")}
+              </ThemedText>
+            </ThemedView>
+          </Pressable>
+        ) : null}
+
+        <ThemedView type="backgroundContent" style={styles.card}>
+          <ThemedText type="smallBold" style={styles.cardTitle}>
+            {t("settings.languageTitle")}
+          </ThemedText>
+          <ThemedText type="small" themeColor="textSecondary">
+            {t("settings.languageNote")}
+          </ThemedText>
+          <View style={styles.languageRow}>
+            {(
+              [
+                { label: t("settings.languageEnglish"), value: "en" },
+                { label: t("settings.languageChinese"), value: "zh" },
+              ] as const
+            ).map((option) => {
+              const isActive = language === option.value;
+
+              return (
+                <Pressable
+                  key={option.value}
+                  onPress={() => setLanguage(option.value)}
+                  style={styles.languagePressable}
+                >
+                  <ThemedView
+                    style={[
+                      styles.languageOption,
+                      isActive && styles.languageOptionActive,
+                    ]}
+                  >
+                    <ThemedText
+                      type="smallBold"
+                      style={[
+                        styles.languageOptionText,
+                        isActive && styles.languageOptionTextActive,
+                      ]}
+                    >
+                      {option.label}
+                    </ThemedText>
+                  </ThemedView>
+                </Pressable>
+              );
+            })}
+          </View>
+        </ThemedView>
+
+        {sessions.length > 0 ? (
+          <Pressable
+            onPress={() => {
+              if (!isClearingHistory) {
+                setIsClearingHistory(true);
+                return;
+              }
+
+              clearAllSessions();
+              setIsClearingHistory(false);
+            }}
+            onPressIn={() => setPressed(true)}
+            onPressOut={() => setPressed(false)}
+          >
+            <ThemedView
+              style={[
+                styles.dangerButton,
+                isClearingHistory && styles.dangerButtonArmed,
+              ]}
+            >
+              <ThemedText style={styles.dangerButtonText}>
+                {isClearingHistory
+                  ? `${t("common.delete")}?`
+                  : `${t("settings.clearHistory")} (${sessions.length})`}
+              </ThemedText>
+            </ThemedView>
+          </Pressable>
+        ) : null}
+
+        {isClearingHistory ? (
+          <Pressable onPress={() => setIsClearingHistory(false)}>
+            <ThemedView type="backgroundElement" style={styles.clearButton}>
+              <ThemedText type="smallBold" style={styles.clearButtonText}>
+                {t("common.cancel")}
               </ThemedText>
             </ThemedView>
           </Pressable>
@@ -161,7 +256,7 @@ export default function SettingsScreen() {
             style={[styles.doneButton, pressed && styles.doneButtonActive]}
           >
             <ThemedText type="smallBold" style={styles.doneButtonText}>
-              Done
+              {t("common.done")}
             </ThemedText>
           </ThemedView>
         </Pressable>
@@ -170,135 +265,183 @@ export default function SettingsScreen() {
   );
 }
 
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-  },
-  safeArea: {
-    flex: 1,
-    paddingHorizontal: Spacing.lg,
-    gap: Spacing.lg,
-    maxWidth: MaxContentWidth,
-    alignSelf: "center",
-    width: "100%",
-  },
-  header: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    paddingTop: Spacing.lg,
-    paddingBottom: Spacing.sm,
-  },
-  backLink: {
-    fontSize: 16,
-    width: 50,
-  },
-  title: {
-    textAlign: "center",
-    flex: 1,
-    color: "#794f27",
-  },
-  card: {
-    gap: Spacing.sm,
-    padding: Spacing.lg,
-    borderRadius: Radius.lg,
-    borderWidth: 2,
-    borderColor: "#c4b89e",
-    ...Shadows.input,
-  },
-  iconRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: Spacing.sm,
-  },
-  keyBadge: {
-    backgroundColor: "#e6f9f6",
-    borderRadius: Radius.sm,
-    color: "#19c8b9",
-    fontSize: 12,
-    fontWeight: "900",
-    paddingHorizontal: Spacing.sm,
-    paddingVertical: 3,
-  },
-  cardTitle: {
-    color: "#794f27",
-    letterSpacing: 0.02,
-  },
-  testButton: {
-    paddingVertical: Spacing.md,
-    borderRadius: Radius.pill,
-    alignItems: "center",
-    ...Shadows.btn,
-  },
-  disabledButton: {
-    opacity: 0.6,
-  },
-  testMessageCard: {
-    borderRadius: Radius.base,
-    paddingHorizontal: Spacing.md,
-    paddingVertical: Spacing.sm,
-    marginTop: Spacing.sm,
-  },
-  testMessageSuccess: {
-    backgroundColor: "rgba(111, 186, 44, 0.12)",
-  },
-  testMessageError: {
-    backgroundColor: "#fff0f0",
-  },
-  testMessageText: {
-    fontSize: 13,
-    lineHeight: 18,
-  },
-  testMessageTextSuccess: {
-    color: "#4f7f2c",
-  },
-  testMessageTextError: {
-    color: "#e05a5a",
-  },
-  clearButton: {
-    paddingVertical: Spacing.md,
-    borderRadius: Radius.pill,
-    alignItems: "center",
-    ...Shadows.btn,
-  },
-  clearButtonActive: {
-    transform: [{ translateY: 2 }],
-    ...Shadows.btnActive,
-  },
-  clearButtonText: {
-    color: "#794f27",
-    fontWeight: "700",
-    fontSize: 16,
-    letterSpacing: 0.02,
-  },
-  input: {
-    borderWidth: 2.5,
-    borderColor: "#c4b89e",
-    borderRadius: Radius.pill,
-    paddingHorizontal: Spacing.lg,
-    paddingVertical: Spacing.sm,
-    fontSize: 16,
-    fontFamily: "Nunito",
-    fontWeight: "500",
-    color: "#725d42",
-    backgroundColor: "#f7f3df",
-    marginTop: Spacing.sm,
-    ...Shadows.input,
-  },
-  doneButton: {
-    paddingVertical: Spacing.md,
-    borderRadius: Radius.pill,
-    alignItems: "center",
-    ...Shadows.btn,
-  },
-  doneButtonActive: {
-    transform: [{ translateY: 2 }],
-    ...Shadows.btnActive,
-  },
-  doneButtonText: {
-    color: "#fff",
-    fontWeight: "700",
-    fontSize: 16,
-    letterSpacing: 0.02,
-  },
-});
+function createStyles(theme: ThemePalette) {
+  const shadows = createShadows(theme);
+
+  return StyleSheet.create({
+    backLink: {
+      fontSize: 16,
+      width: 64,
+    },
+    card: {
+      borderColor: theme.border,
+      borderRadius: Radius.lg,
+      borderWidth: 2,
+      gap: Spacing.sm,
+      padding: Spacing.lg,
+      ...shadows.input,
+    },
+    cardTitle: {
+      color: theme.text,
+      letterSpacing: 0.02,
+    },
+    clearButton: {
+      alignItems: "center",
+      borderRadius: Radius.pill,
+      paddingVertical: Spacing.md,
+      ...shadows.btn,
+    },
+    clearButtonActive: {
+      transform: [{ translateY: 2 }],
+      ...shadows.btnActive,
+    },
+    clearButtonText: {
+      color: theme.text,
+      fontSize: 16,
+      fontWeight: "700",
+      letterSpacing: 0.02,
+    },
+    container: {
+      flex: 1,
+    },
+    dangerButton: {
+      alignItems: "center",
+      backgroundColor: theme.errorSurface,
+      borderColor: theme.errorBorder,
+      borderRadius: Radius.pill,
+      borderWidth: 1,
+      paddingVertical: Spacing.md,
+    },
+    dangerButtonArmed: {
+      borderWidth: 2,
+    },
+    dangerButtonText: {
+      color: theme.error,
+      fontSize: 16,
+      fontWeight: "700",
+      letterSpacing: 0.02,
+    },
+    disabledButton: {
+      opacity: 0.6,
+    },
+    doneButton: {
+      alignItems: "center",
+      borderRadius: Radius.pill,
+      paddingVertical: Spacing.md,
+      ...shadows.btn,
+    },
+    doneButtonActive: {
+      transform: [{ translateY: 2 }],
+      ...shadows.btnActive,
+    },
+    doneButtonText: {
+      color: "#ffffff",
+      fontSize: 16,
+      fontWeight: "700",
+      letterSpacing: 0.02,
+    },
+    header: {
+      alignItems: "center",
+      flexDirection: "row",
+      justifyContent: "space-between",
+      paddingBottom: Spacing.sm,
+      paddingTop: Spacing.lg,
+    },
+    headerSpacer: {
+      width: 64,
+    },
+    iconRow: {
+      alignItems: "center",
+      flexDirection: "row",
+      gap: Spacing.sm,
+    },
+    input: {
+      backgroundColor: theme.backgroundContent,
+      borderColor: theme.border,
+      borderRadius: Radius.pill,
+      borderWidth: 2.5,
+      color: theme.textBody,
+      fontFamily: "Nunito",
+      fontSize: 16,
+      fontWeight: "500",
+      marginTop: Spacing.sm,
+      paddingHorizontal: Spacing.lg,
+      paddingVertical: Spacing.sm,
+      ...shadows.input,
+    },
+    keyBadge: {
+      backgroundColor: theme.primaryBg,
+      borderRadius: Radius.sm,
+      color: theme.primary,
+      fontSize: 12,
+      fontWeight: "900",
+      paddingHorizontal: Spacing.sm,
+      paddingVertical: 3,
+    },
+    languageOption: {
+      alignItems: "center",
+      backgroundColor: theme.chip,
+      borderRadius: Radius.pill,
+      paddingHorizontal: Spacing.lg,
+      paddingVertical: Spacing.sm,
+    },
+    languageOptionActive: {
+      backgroundColor: theme.primary,
+    },
+    languageOptionText: {
+      color: theme.text,
+    },
+    languageOptionTextActive: {
+      color: "#ffffff",
+    },
+    languagePressable: {
+      flex: 1,
+    },
+    languageRow: {
+      flexDirection: "row",
+      gap: Spacing.sm,
+      marginTop: Spacing.sm,
+    },
+    safeArea: {
+      alignSelf: "center",
+      flex: 1,
+      gap: Spacing.lg,
+      maxWidth: MaxContentWidth,
+      paddingHorizontal: Spacing.lg,
+      width: "100%",
+    },
+    testButton: {
+      alignItems: "center",
+      borderRadius: Radius.pill,
+      paddingVertical: Spacing.md,
+      ...shadows.btn,
+    },
+    testMessageCard: {
+      borderRadius: Radius.base,
+      marginTop: Spacing.sm,
+      paddingHorizontal: Spacing.md,
+      paddingVertical: Spacing.sm,
+    },
+    testMessageError: {
+      backgroundColor: theme.errorSurface,
+    },
+    testMessageSuccess: {
+      backgroundColor: theme.successWash,
+    },
+    testMessageText: {
+      fontSize: 13,
+      lineHeight: 18,
+    },
+    testMessageTextError: {
+      color: theme.error,
+    },
+    testMessageTextSuccess: {
+      color: theme.successText,
+    },
+    title: {
+      color: theme.text,
+      flex: 1,
+      textAlign: "center",
+    },
+  });
+}

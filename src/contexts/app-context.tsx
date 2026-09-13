@@ -8,6 +8,7 @@ import React, {
 
 import { clearApiKey, loadApiKey, saveApiKey } from "@/services/secure-storage";
 import {
+  clearAllSessions as clearAllStoredSessions,
   deleteSession,
   deriveTitle,
   loadSessions,
@@ -15,6 +16,7 @@ import {
 } from "@/services/session-storage";
 import type { DialogueSegment } from "@/types/dialogue";
 import type { PracticeSession } from "@/types/session";
+
 
 interface AppState {
   apiKey: string;
@@ -39,9 +41,11 @@ interface AppState {
   saveCurrentSession: (
     progress: Pick<
       PracticeSession,
-      "currentWordIndex" | "corrections"
+      "currentWordIndex" | "corrections" | "practiceMode"
     >,
   ) => void;
+  removeSession: (id: string) => void;
+  clearAllSessions: () => void;
 }
 
 const AppContext = createContext<AppState | null>(null);
@@ -146,8 +150,15 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   );
 
   const saveCurrentSession = useCallback(
-    (progress: Pick<PracticeSession, "currentWordIndex" | "corrections">) => {
+    (
+      progress: Pick<
+        PracticeSession,
+        "currentWordIndex" | "corrections" | "practiceMode"
+      >,
+    ) => {
       if (!currentSessionId) return;
+
+      const existing = sessions.find((s) => s.id === currentSessionId);
 
       const session: PracticeSession = {
         id: currentSessionId,
@@ -155,7 +166,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         segments,
         currentWordIndex: progress.currentWordIndex,
         corrections: progress.corrections,
-        createdAt: Date.now(),
+        practiceMode: progress.practiceMode,
+        createdAt: existing?.createdAt ?? Date.now(),
         updatedAt: Date.now(),
         title: deriveTitle(scene),
       };
@@ -166,12 +178,19 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         return [session, ...filtered];
       });
     },
-    [currentSessionId, scene, segments],
+    [currentSessionId, scene, segments, sessions],
   );
 
   const removeSession = useCallback((id: string) => {
     void deleteSession(id);
     setSessionsState((prev) => prev.filter((s) => s.id !== id));
+    setCurrentSessionId((current) => (current === id ? null : current));
+  }, []);
+
+  const clearAllSessions = useCallback(() => {
+    void clearAllStoredSessions();
+    setSessionsState([]);
+    setCurrentSessionId(null);
   }, []);
 
   return (
@@ -198,6 +217,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         startNewSession,
         saveCurrentSession,
         removeSession,
+        clearAllSessions,
       }}
     >
       {children}

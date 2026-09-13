@@ -1,29 +1,36 @@
-export function formatRelativeTime(timestamp: number): string {
+import type { MessageKey, TranslateParams } from "@/i18n";
+
+type Translator = (key: MessageKey, params?: TranslateParams) => string;
+
+export function formatRelativeTime(
+  timestamp: number,
+  t: Translator,
+): string {
   const seconds = Math.floor((Date.now() - timestamp) / 1000);
 
   if (seconds < 60) {
-    return "Just now";
+    return t("time.justNow");
   }
 
   const minutes = Math.floor(seconds / 60);
   if (minutes < 60) {
-    return `${minutes}m ago`;
+    return t("time.minutesAgo", { count: minutes });
   }
 
   const hours = Math.floor(minutes / 60);
   if (hours < 24) {
-    return `${hours}h ago`;
+    return t("time.hoursAgo", { count: hours });
   }
 
   const days = Math.floor(hours / 24);
   if (days < 30) {
-    return `${days}d ago`;
+    return t("time.daysAgo", { count: days });
   }
 
   const months = Math.floor(days / 30);
   if (months < 12) {
-    return `${months}mo ago`;
+    return t("time.monthsAgo", { count: months });
   }
 
-  return `${Math.floor(months / 12)}y ago`;
+  return t("time.yearsAgo", { count: Math.floor(months / 12) });
 }

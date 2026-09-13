@@ -65,6 +65,14 @@ export async function deleteSession(id: string): Promise<void> {
   await saveSessions(filtered);
 }
 
+export async function clearAllSessions(): Promise<void> {
+  try {
+    await AsyncStorage.removeItem(SESSIONS_KEY);
+  } catch (error) {
+    console.warn("Failed to clear practice sessions:", error);
+  }
+}
+
 export function deriveTitle(scene: string): string {
   const trimmed = scene.trim();
   if (!trimmed) return "Untitled practice";

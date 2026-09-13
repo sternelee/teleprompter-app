@@ -5,14 +5,14 @@
 
 import { useMemo } from "react";
 
-import { Colors } from "@/constants/theme";
+import { Colors, Tokens, type ThemePalette } from "@/constants/theme";
 import { useColorScheme } from "@/hooks/use-color-scheme";
 
-export function useTheme() {
+export function useTheme(): ThemePalette {
   const scheme = useColorScheme();
 
-  return useMemo(
-    () => Colors[scheme === "dark" ? "dark" : "light"],
-    [scheme],
-  );
+  return useMemo(() => {
+    const variant = scheme === "dark" ? "dark" : "light";
+    return { ...Colors[variant], ...Tokens[variant] };
+  }, [scheme]);
 }

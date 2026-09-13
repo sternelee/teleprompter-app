@@ -27,11 +27,18 @@ export function ThemedText({
   ...rest
 }: ThemedTextProps) {
   const theme = useTheme();
+  const resolvedColor = themeColor
+    ? theme[themeColor]
+    : type === "body"
+      ? theme.textBody
+      : type === "link" || type === "linkPrimary"
+        ? theme.primary
+        : theme.text;
 
   return (
     <Text
       style={[
-        { color: theme[themeColor ?? "text"] },
+        { color: resolvedColor },
         styles.base,
         type === "default" && styles.default,
         type === "body" && styles.body,
@@ -79,7 +86,6 @@ const styles = StyleSheet.create({
     lineHeight: 26,
     fontWeight: "500",
     letterSpacing: 0.01,
-    color: "#725d42",
   },
   title: {
     fontSize: 40,
@@ -103,14 +109,12 @@ const styles = StyleSheet.create({
     lineHeight: 30,
     fontSize: 14,
     fontWeight: "600",
-    color: "#19c8b9",
     letterSpacing: 0.02,
   },
   linkPrimary: {
     lineHeight: 30,
     fontSize: 14,
     fontWeight: "600",
-    color: "#19c8b9",
     letterSpacing: 0.02,
   },
   code: {

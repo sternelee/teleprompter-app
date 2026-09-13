@@ -7,6 +7,11 @@ import { useCallback, useEffect, useRef, useState } from "react";
 
 type UseSpeechRecognitionOptions = {
   language?: string;
+  /** Localized fallbacks so the hook stays presentation-agnostic. */
+  messages?: {
+    permissionRequired?: string;
+    failed?: string;
+  };
   onError?: (message: string) => void;
   onResult: (transcript: string) => void;
 };
@@ -15,19 +20,25 @@ type SpeechPermissionResponse = {
   granted?: boolean;
 };
 
-function formatErrorMessage(error: unknown) {
+function formatErrorMessage(error: unknown, fallback: string) {
   if (error instanceof Error) {
     return error.message;
   }
 
-  return "Speech recognition failed. Please try again.";
+  return fallback;
 }
 
 export function useSpeechRecognition({
   language = "en-US",
+  messages,
   onError,
   onResult,
 }: UseSpeechRecognitionOptions) {
+  const permissionMessage =
+    messages?.permissionRequired ??
+    "Microphone permission is required to practice speaking.";
+  const failureMessage =
+    messages?.failed ?? "Speech recognition failed. Please try again.";
   const [permissionResponse, setPermissionResponse] =
     useState<SpeechPermissionResponse | null>(null);
   const [isListening, setIsListening] = useState(false);
@@ -80,14 +91,14 @@ export function useSpeechRecognition({
         } : undefined,
       });
     } catch (error) {
-      emitError(formatErrorMessage(error));
+      emitError(formatErrorMessage(error, failureMessage));
     } finally {
       // Give a small buffer before allowing another start
       setTimeout(() => {
         isRestartingRef.current = false;
       }, 500);
     }
-  }, [emitError, language]);
+  }, [emitError, failureMessage, language]);
 
   const startListening = useCallback(async () => {
     const granted =
@@ -96,7 +107,7 @@ export function useSpeechRecognition({
         : (await requestPermission()).granted;
 
     if (!granted) {
-      emitError("Microphone permission is required to practice speaking.");
+      emitError(permissionMessage);
       return;
     }
 
@@ -105,7 +116,14 @@ export function useSpeechRecognition({
     transcriptTallyRef.current = "";
 
     await doStart();
-  }, [clearRestartTimer, doStart, emitError, permissionResponse?.granted, requestPermission]);
+  }, [
+    clearRestartTimer,
+    doStart,
+    emitError,
+    permissionMessage,
+    permissionResponse?.granted,
+    requestPermission,
+  ]);
 
   const stopListening = useCallback(async () => {
     shouldAutoRestartRef.current = false;
@@ -115,9 +133,9 @@ export function useSpeechRecognition({
     try {
       await ExpoSpeechRecognitionModule.stop();
     } catch (error) {
-      emitError(formatErrorMessage(error));
+      emitError(formatErrorMessage(error, failureMessage));
     }
-  }, [clearRestartTimer, emitError]);
+  }, [clearRestartTimer, emitError, failureMessage]);
 
   useSpeechRecognitionEvent("start", () => {
     setIsListening(true);
@@ -157,7 +175,7 @@ export function useSpeechRecognition({
     if (event.error === "no-speech" && shouldAutoRestartRef.current) {
       return;
     }
-    emitError(event.error ?? "Speech recognition failed. Please try again.");
+    emitError(event.error ?? failureMessage);
   });
 
   useEffect(() => {
