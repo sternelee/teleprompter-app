@@ -19,7 +19,11 @@ type PracticeReportProps = {
   assessment?: PracticeAssessment | null;
   assessmentPending?: boolean;
   corrections: Correction[];
+  /** True while a continuation stretch is being generated. */
+  isContinuing?: boolean;
   onClose: () => void;
+  /** Ask DeepSeek to continue the dialogue with a new stretch. */
+  onContinue?: () => void;
   onRestart: () => void;
   spokenCount: number;
   totalWords: number;
@@ -47,7 +51,9 @@ export function PracticeReport({
   assessment,
   assessmentPending = false,
   corrections,
+  isContinuing = false,
   onClose,
+  onContinue,
   onRestart,
   spokenCount,
   totalWords,
@@ -213,6 +219,28 @@ export function PracticeReport({
             </View>
           ) : null}
 
+          {onContinue ? (
+            <Pressable
+              onPress={onContinue}
+              disabled={isContinuing}
+              style={styles.continueAction}
+            >
+              <ThemedView
+                type="primary"
+                style={[
+                  styles.continueButton,
+                  isContinuing && styles.continueButtonBusy,
+                ]}
+              >
+                <ThemedText type="smallBold" style={styles.primaryButtonText}>
+                  {isContinuing
+                    ? t("teleprompter.reportContinueBusy")
+                    : t("teleprompter.reportContinue")}
+                </ThemedText>
+              </ThemedView>
+            </Pressable>
+          ) : null}
+
           <View style={styles.actions}>
             <Pressable onPress={onRestart} style={styles.action}>
               <ThemedView type="primary" style={styles.primaryButton}>
@@ -304,6 +332,19 @@ function createStyles(theme: ThemePalette) {
       borderRadius: Radius.pill,
       paddingVertical: Spacing.md,
       ...shadows.btn,
+    },
+    continueAction: {
+      width: "100%",
+    },
+    continueButton: {
+      alignItems: "center",
+      borderRadius: Radius.pill,
+      paddingVertical: Spacing.md,
+      width: "100%",
+      ...shadows.btn,
+    },
+    continueButtonBusy: {
+      opacity: 0.7,
     },
     closeButtonText: {
       color: theme.text,

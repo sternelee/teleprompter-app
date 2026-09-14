@@ -509,24 +509,18 @@ export default function TeleprompterScreen() {
     wordsBySegment,
   ]);
 
-  useEffect(() => {
-    if (
-      !scene ||
-      !apiKey ||
-      !finalSegment ||
-      !isOnFinalSegment ||
-      remainingWords > AUTO_CONTINUE_REMAINING ||
-      spokenCount === 0 ||
-      isGenerating ||
-      isContinuing ||
-      fetchingRef.current ||
-      lastAutoContinueSegmentIdRef.current === finalSegment.id
-    ) {
-      return;
-    }
+  /** Generate and append the next stretch of dialogue. */
+  const continueDialogue = useCallback(() => {
+    if (!scene || !apiKey || fetchingRef.current || isContinuing) return;
+
+    const currentFinal = segments[segments.length - 1];
+    if (!currentFinal) return;
+    // One continuation per final segment — manual presses after an
+    // auto-continue still work because appending changes the final segment.
+    if (lastAutoContinueSegmentIdRef.current === currentFinal.id) return;
 
     fetchingRef.current = true;
-    lastAutoContinueSegmentIdRef.current = finalSegment.id;
+    lastAutoContinueSegmentIdRef.current = currentFinal.id;
     setAutoContinueError(null);
     setIsContinuing(true);
     const guidance = latestAssessmentGuidance(sessions);
@@ -542,7 +536,7 @@ export default function TeleprompterScreen() {
         }
       })
       .catch((error: unknown) => {
-        console.warn("Failed to auto-continue dialogue:", error);
+        console.warn("Failed to continue dialogue:", error);
         setAutoContinueError(
           error instanceof Error
             ? error.message
@@ -556,16 +550,38 @@ export default function TeleprompterScreen() {
   }, [
     appendSegments,
     apiKey,
+    isContinuing,
+    scene,
+    segments,
+    sessions,
+    t,
+  ]);
+
+  // Auto-continuation: fetch the next stretch once the learner is close to
+  // the end of the script.
+  useEffect(() => {
+    if (
+      !finalSegment ||
+      !isOnFinalSegment ||
+      remainingWords > AUTO_CONTINUE_REMAINING ||
+      spokenCount === 0 ||
+      isGenerating ||
+      isContinuing ||
+      fetchingRef.current ||
+      lastAutoContinueSegmentIdRef.current === finalSegment.id
+    ) {
+      return;
+    }
+
+    continueDialogue();
+  }, [
+    continueDialogue,
     finalSegment,
     isContinuing,
     isGenerating,
     isOnFinalSegment,
     remainingWords,
-    scene,
-    segments,
-    sessions,
     spokenCount,
-    t,
   ]);
 
   // Role mode: read every partner line the learner has reached out loud.
@@ -752,6 +768,17 @@ export default function TeleprompterScreen() {
     resetProgress();
     scrollViewRef.current?.scrollTo({ y: 0, animated: true });
   }, [resetProgress, stopListening, stopSpeaking]);
+
+  const handleContinueDialogue = useCallback(() => {
+    if (!apiKey || !scene) return;
+
+    // Close the report and keep the session going with a fresh stretch.
+    setReportVisible(false);
+    setIsReading(false);
+    setSpeechError(null);
+    setAutoContinueError(null);
+    continueDialogue();
+  }, [apiKey, continueDialogue, scene]);
 
   const handleBack = useCallback(() => {
     setIsReading(false);
@@ -1178,7 +1205,11 @@ export default function TeleprompterScreen() {
           assessment={assessment}
           assessmentPending={isAssessing}
           corrections={corrections}
+          isContinuing={isContinuing}
           onClose={() => setReportVisible(false)}
+          onContinue={
+            apiKey && scene ? handleContinueDialogue : undefined
+          }
           onRestart={handleRestart}
           spokenCount={spokenCount}
           totalWords={totalWords}
