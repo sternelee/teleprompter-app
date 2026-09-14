@@ -9,6 +9,10 @@ export interface GenerateDialogueOptions {
   previousSegments?: DialogueSegment[];
   /** Due review words to weave naturally into the new dialogue. */
   reviewWords?: string[];
+  /** Adaptive challenge level, 0–5, from the latest assessment. */
+  learnerLevel?: number;
+  /** One-sentence teaching focus from the latest assessment. */
+  teachingFocus?: string;
 }
 
 function generateId(): string {
@@ -25,6 +29,8 @@ function buildPrompt(
   scene: string,
   previousSegments?: DialogueSegment[],
   reviewWords: string[] = [],
+  learnerLevel?: number,
+  teachingFocus?: string,
 ): string {
   const hasPreviousDialogue = Boolean(previousSegments?.length);
   const previous = previousSegments?.length
@@ -34,6 +40,17 @@ function buildPrompt(
     ? "Continue with 8-12 new lines (4-6 new exchanges)"
     : "Be 10-14 lines (5-7 exchanges)";
   const reviewWordsBlock = buildReviewWordsBlock(reviewWords);
+  const level =
+    typeof learnerLevel === "number" && Number.isFinite(learnerLevel)
+      ? Math.min(5, Math.max(0, Math.round(learnerLevel)))
+      : null;
+  const levelRule =
+    level === null
+      ? "- Be appropriate for intermediate English learners"
+      : `- Match the learner's challenge level ${level}/5 (0 = beginner, 5 = advanced): choose vocabulary, idioms and sentence complexity accordingly`;
+  const focusRule = teachingFocus
+    ? `- Teaching focus for this dialogue: ${teachingFocus}`
+    : "";
 
   return `You are creating English speaking practice dialogue for a language learner.
 
@@ -41,6 +58,7 @@ Scene: ${scene}${previous}${reviewWordsBlock}
 
 Generate a natural English dialogue for this scene. The dialogue should:
 - ${lengthRule}
+${levelRule}
 - Use practical, everyday English
 - Be appropriate for intermediate English learners
 - Include both the user's lines and the other person's lines
@@ -49,7 +67,7 @@ Generate a natural English dialogue for this scene. The dialogue should:
 - Keep each line short enough to say in one breath
 - Do not include stage directions, translations, markdown, or explanations
 - If previous dialogue is provided, preserve the same context, roles, topic, details, tone, and unresolved goal
-- If previous dialogue is provided, continue directly after the final line without repeating, summarizing, or restarting earlier lines
+- If previous dialogue is provided, continue directly after the final line without repeating, summarizing, or restarting earlier lines${focusRule ? `\n${focusRule}` : ""}
 
 Return ONLY a JSON object in this exact format:
 {
@@ -81,13 +99,16 @@ export async function generateDialogue(
   const normalized: GenerateDialogueOptions = Array.isArray(options)
     ? { previousSegments: options }
     : options;
-  const { previousSegments, reviewWords = [] } = normalized;
+  const { previousSegments, reviewWords = [], learnerLevel, teachingFocus } =
+    normalized;
 
   let segments = await requestDialogue(
     scene,
     apiKey,
     previousSegments,
     reviewWords,
+    learnerLevel,
+    teachingFocus,
   );
 
   // If the model ignored every review word, retry once with a stronger
@@ -101,6 +122,8 @@ export async function generateDialogue(
       apiKey,
       previousSegments,
       reviewWords,
+      learnerLevel,
+      teachingFocus,
       /* emphasiseReview */ true,
     );
   }
@@ -136,9 +159,17 @@ async function requestDialogue(
   apiKey: string,
   previousSegments: DialogueSegment[] | undefined,
   reviewWords: string[],
+  learnerLevel?: number,
+  teachingFocus?: string,
   emphasiseReview = false,
 ): Promise<DialogueSegment[]> {
-  let prompt = buildPrompt(scene, previousSegments, reviewWords);
+  let prompt = buildPrompt(
+    scene,
+    previousSegments,
+    reviewWords,
+    learnerLevel,
+    teachingFocus,
+  );
   if (emphasiseReview) {
     prompt += `\n\nIMPORTANT: the dialogue MUST naturally include at least half of the review vocabulary listed above.`;
   }

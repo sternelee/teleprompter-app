@@ -22,6 +22,11 @@ import { useWordSpeech } from "@/hooks/use-word-speech";
 import { normalizeWord, useWordMatcher } from "@/hooks/use-word-matcher";
 import { useI18n } from "@/i18n";
 import { generateDialogue } from "@/services/openai";
+import {
+  latestAssessmentGuidance,
+  requestAssessment,
+} from "@/services/assessment";
+import type { PracticeAssessment } from "@/types/assessment";
 import { projectVocabulary, selectReviewWords } from "@/services/vocabulary";
 import type { Word } from "@/types/dialogue";
 import type { PracticeMode } from "@/types/session";
@@ -64,6 +69,7 @@ export default function TeleprompterScreen() {
     currentSessionId,
     sessions,
     saveCurrentSession,
+    attachAssessment,
     appendSegments,
   } = useApp();
   const { t } = useI18n();
@@ -89,6 +95,11 @@ export default function TeleprompterScreen() {
   const [contentHeight, setContentHeight] = useState(0);
   const [viewportHeight, setViewportHeight] = useState(0);
   const [reportVisible, setReportVisible] = useState(false);
+  const [assessmentRound, setAssessmentRound] = useState<{
+    sessionId: string;
+    assessment: PracticeAssessment | null;
+  } | null>(null);
+  const [isAssessing, setIsAssessing] = useState(false);
   const [practiceMode, setPracticeMode] = useState<PracticeMode>(
     () =>
       sessions.find((session) => session.id === currentSessionId)
@@ -101,6 +112,7 @@ export default function TeleprompterScreen() {
   const segmentOffsetsRef = useRef<Record<number, number>>({});
   const spokenPartnerSegmentsRef = useRef<Set<string>>(new Set());
   const reportShownRef = useRef(false);
+  const assessmentKeyRef = useRef<string | null>(null);
   const modeResetRef = useRef<PracticeMode | null>(null);
 
   const allWords = useMemo(() => {
@@ -517,9 +529,12 @@ export default function TeleprompterScreen() {
     lastAutoContinueSegmentIdRef.current = finalSegment.id;
     setAutoContinueError(null);
     setIsContinuing(true);
+    const guidance = latestAssessmentGuidance(sessions);
     void generateDialogue(scene, apiKey, {
       previousSegments: segments,
       reviewWords: selectReviewWords(projectVocabulary(sessions)),
+      learnerLevel: guidance?.level,
+      teachingFocus: guidance?.nextGoal,
     })
       .then((newSegments) => {
         if (newSegments.length > 0) {
@@ -603,6 +618,73 @@ export default function TeleprompterScreen() {
     void stopListening();
     setReportVisible(true);
   }, [isComplete, stopListening, stopSpeaking]);
+
+  // Display the assessment for the active session: a freshly fetched round
+  // wins, otherwise fall back to the one stored on the session record.
+  const storedAssessment = useMemo(
+    () => sessions.find((s) => s.id === currentSessionId)?.assessment ?? null,
+    [sessions, currentSessionId],
+  );
+  const assessment =
+    assessmentRound?.sessionId === currentSessionId
+      ? (assessmentRound.assessment ?? null)
+      : storedAssessment;
+
+  // Ask the AI coach for one assessment per practice round when the report
+  // opens. The proposal is strictly validated against this session's real
+  // dialogue before it is shown or stored (services/assessment.ts).
+  useEffect(() => {
+    if (
+      !reportVisible ||
+      !currentSessionId ||
+      !apiKey ||
+      segments.length === 0 ||
+      spokenCount === 0
+    ) {
+      return;
+    }
+
+    const signature = `${currentSessionId}:${segments.length}:${corrections.length}:${spokenCount}`;
+    if (assessmentKeyRef.current === signature) return;
+    assessmentKeyRef.current = signature;
+
+    let cancelled = false;
+    setAssessmentRound({ sessionId: currentSessionId, assessment: null });
+    setIsAssessing(true);
+
+    void requestAssessment(
+      { scene, segments, corrections, spokenCount, totalWords },
+      apiKey,
+    )
+      .then((result) => {
+        if (cancelled || !result) return;
+        setAssessmentRound({
+          sessionId: currentSessionId,
+          assessment: result,
+        });
+        attachAssessment(currentSessionId, result);
+      })
+      .catch((error: unknown) => {
+        console.warn("Failed to assess practice round:", error);
+      })
+      .finally(() => {
+        if (!cancelled) setIsAssessing(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    reportVisible,
+    apiKey,
+    currentSessionId,
+    scene,
+    segments,
+    corrections,
+    spokenCount,
+    totalWords,
+    attachAssessment,
+  ]);
 
   useEffect(() => {
     return () => {
@@ -1093,6 +1175,8 @@ export default function TeleprompterScreen() {
         </View>
 
         <PracticeReport
+          assessment={assessment}
+          assessmentPending={isAssessing}
           corrections={corrections}
           onClose={() => setReportVisible(false)}
           onRestart={handleRestart}

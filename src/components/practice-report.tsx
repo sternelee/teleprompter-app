@@ -11,9 +11,13 @@ import {
 } from "@/constants/theme";
 import { useTheme } from "@/hooks/use-theme";
 import { useI18n, type MessageKey } from "@/i18n";
+import type { PracticeAssessment } from "@/types/assessment";
 import type { Correction } from "@/types/dialogue";
 
 type PracticeReportProps = {
+  /** Validated AI coach assessment for this round, when available. */
+  assessment?: PracticeAssessment | null;
+  assessmentPending?: boolean;
   corrections: Correction[];
   onClose: () => void;
   onRestart: () => void;
@@ -28,7 +32,20 @@ function getSummaryKey(percent: number): MessageKey {
   return "teleprompter.reportSummaryLow";
 }
 
+function outcomeKey(outcome: PracticeAssessment["outcome"]): MessageKey {
+  switch (outcome) {
+    case "success":
+      return "teleprompter.reportCoachOutcomeSuccess";
+    case "breakdown":
+      return "teleprompter.reportCoachOutcomeBreakdown";
+    default:
+      return "teleprompter.reportCoachOutcomePartial";
+  }
+}
+
 export function PracticeReport({
+  assessment,
+  assessmentPending = false,
   corrections,
   onClose,
   onRestart,
@@ -133,6 +150,69 @@ export function PracticeReport({
             )}
           </View>
 
+          {assessmentPending ? (
+            <View style={styles.coachBlock}>
+              <ThemedText type="smallBold" style={styles.weakTitle}>
+                {t("teleprompter.reportCoachTitle")}
+              </ThemedText>
+              <ThemedText type="small" style={styles.coachPending}>
+                {t("teleprompter.reportCoachPending")}
+              </ThemedText>
+            </View>
+          ) : assessment ? (
+            <View style={styles.coachBlock}>
+              <ThemedText type="smallBold" style={styles.weakTitle}>
+                {t("teleprompter.reportCoachTitle")}
+              </ThemedText>
+              <View style={styles.coachRow}>
+                <ThemedView
+                  style={[
+                    styles.coachOutcomeChip,
+                    assessment.outcome === "success" && {
+                      backgroundColor: theme.spoken,
+                    },
+                    assessment.outcome === "partial" && {
+                      backgroundColor: theme.current,
+                    },
+                    assessment.outcome === "breakdown" && {
+                      backgroundColor: theme.error,
+                    },
+                  ]}
+                >
+                  <ThemedText
+                    style={[
+                      styles.coachOutcomeText,
+                      assessment.outcome === "partial" &&
+                        styles.coachOutcomeTextDark,
+                    ]}
+                  >
+                    {t(outcomeKey(assessment.outcome))}
+                  </ThemedText>
+                </ThemedView>
+                <ThemedText type="small" themeColor="textSecondary">
+                  {t("teleprompter.reportCoachLevel", {
+                    level: assessment.suggestedLevel,
+                  })}
+                </ThemedText>
+              </View>
+              {assessment.capability ? (
+                <ThemedText type="small" style={styles.coachText}>
+                  {assessment.capability}
+                </ThemedText>
+              ) : null}
+              {assessment.nextGoal ? (
+                <View style={styles.coachGoal}>
+                  <ThemedText type="small" style={styles.coachGoalLabel}>
+                    {t("teleprompter.reportCoachNextGoal")}
+                  </ThemedText>
+                  <ThemedText type="small" style={styles.coachText}>
+                    {assessment.nextGoal}
+                  </ThemedText>
+                </View>
+              ) : null}
+            </View>
+          ) : null}
+
           <View style={styles.actions}>
             <Pressable onPress={onRestart} style={styles.action}>
               <ThemedView type="primary" style={styles.primaryButton}>
@@ -161,6 +241,43 @@ function createStyles(theme: ThemePalette) {
   return StyleSheet.create({
     action: {
       flex: 1,
+    },
+    coachBlock: {
+      gap: Spacing.sm,
+    },
+    coachGoal: {
+      gap: 2,
+    },
+    coachGoalLabel: {
+      color: theme.textMuted,
+      fontWeight: "800",
+    },
+    coachOutcomeChip: {
+      alignItems: "center",
+      borderRadius: Radius.pill,
+      paddingHorizontal: Spacing.md,
+      paddingVertical: 4,
+    },
+    coachOutcomeText: {
+      color: "#ffffff",
+      fontSize: 12,
+      fontWeight: "800",
+      letterSpacing: 0.02,
+    },
+    coachOutcomeTextDark: {
+      color: theme.text,
+    },
+    coachPending: {
+      color: theme.textMuted,
+    },
+    coachRow: {
+      alignItems: "center",
+      flexDirection: "row",
+      gap: Spacing.sm,
+    },
+    coachText: {
+      color: theme.textBodySoft,
+      lineHeight: 20,
     },
     actions: {
       flexDirection: "row",

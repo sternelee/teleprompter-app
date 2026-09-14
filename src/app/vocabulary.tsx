@@ -114,6 +114,12 @@ export default function VocabularyScreen() {
                   </View>
                 </View>
 
+                {entry.meaning ? (
+                  <ThemedText type="small" themeColor="textSecondary">
+                    {entry.meaning}
+                  </ThemedText>
+                ) : null}
+
                 <View style={styles.metaRow}>
                   <ThemedView
                     style={[styles.labelChip, entry.isDue && styles.labelChipDue]}

@@ -1,4 +1,5 @@
 import { type Correction, type DialogueSegment } from "./dialogue";
+import type { PracticeAssessment } from "./assessment";
 
 /**
  * `full`  — practice every word in the script (partner + your lines).
@@ -16,4 +17,6 @@ export interface PracticeSession {
   createdAt: number;
   updatedAt: number;
   title?: string;
+  /** Validated AI assessment for this round (see services/assessment.ts). */
+  assessment?: PracticeAssessment;
 }

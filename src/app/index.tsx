@@ -26,6 +26,7 @@ import { useApp } from "@/contexts/app-context";
 import { useTheme } from "@/hooks/use-theme";
 import { useI18n, type MessageKey } from "@/i18n";
 import { generateDialogue } from "@/services/openai";
+import { latestAssessmentGuidance } from "@/services/assessment";
 import {
   projectVocabulary,
   selectReviewWords,
@@ -193,10 +194,14 @@ export default function HomeScreen() {
     setScene(nextScene);
 
     try {
-      // Weave overdue review words from past sessions into the new dialogue.
+      // Weave overdue review words from past sessions into the new dialogue
+      // and adapt difficulty to the latest validated assessment.
       const reviewWords = selectReviewWords(projectVocabulary(sessions));
+      const guidance = latestAssessmentGuidance(sessions);
       const nextSegments = await generateDialogue(nextScene, apiKey, {
         reviewWords,
+        learnerLevel: guidance?.level,
+        teachingFocus: guidance?.nextGoal,
       });
       startNewSession(nextScene, nextSegments);
       router.push("/teleprompter");

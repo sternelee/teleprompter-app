@@ -15,6 +15,7 @@ import {
   saveSession,
 } from "@/services/session-storage";
 import type { DialogueSegment } from "@/types/dialogue";
+import type { PracticeAssessment } from "@/types/assessment";
 import type { PracticeSession } from "@/types/session";
 import {
   DEFAULT_SPEECH_PREFERENCE,
@@ -53,6 +54,8 @@ interface AppState {
       "currentWordIndex" | "corrections" | "practiceMode"
     >,
   ) => void;
+  /** Persist a validated AI assessment onto its session record. */
+  attachAssessment: (sessionId: string, assessment: PracticeAssessment) => void;
   removeSession: (id: string) => void;
   clearAllSessions: () => void;
 }
@@ -192,6 +195,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         createdAt: existing?.createdAt ?? Date.now(),
         updatedAt: Date.now(),
         title: deriveTitle(scene),
+        // Progress saves rebuild the record; keep any stored assessment.
+        assessment: existing?.assessment,
       };
 
       void saveSession(session);
@@ -201,6 +206,26 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       });
     },
     [currentSessionId, scene, segments, sessions],
+  );
+
+  const attachAssessment = useCallback(
+    (sessionId: string, assessment: PracticeAssessment) => {
+      const existing = sessions.find((s) => s.id === sessionId);
+      if (!existing) return;
+
+      const next: PracticeSession = {
+        ...existing,
+        assessment,
+        updatedAt: Date.now(),
+      };
+
+      void saveSession(next);
+      setSessionsState((prev) => {
+        const filtered = prev.filter((s) => s.id !== sessionId);
+        return [next, ...filtered];
+      });
+    },
+    [sessions],
   );
 
   const removeSession = useCallback((id: string) => {
@@ -240,6 +265,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         loadSession,
         startNewSession,
         saveCurrentSession,
+        attachAssessment,
         removeSession,
         clearAllSessions,
       }}

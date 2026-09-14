@@ -41,6 +41,10 @@ export interface VocabularyEntry {
   isDue: boolean;
   /** Scene titles where the word was recalled independently. */
   contexts: string[];
+  /** Chinese gloss from the latest validated AI assessment, if any. */
+  meaning?: string;
+  /** Dictionary lemma from the latest validated AI assessment, if any. */
+  lemma?: string;
 }
 
 type EvidenceKind = "independent" | "lapse";
@@ -149,6 +153,19 @@ export function projectVocabulary(
   sessions: PracticeSession[],
   now: number = Date.now(),
 ): VocabularyEntry[] {
+  // Latest validated AI glossary wins per word form.
+  const glossaryByKey = new Map<string, { lemma: string; meaning: string }>();
+  for (const session of [...sessions].sort(
+    (a, b) => b.updatedAt - a.updatedAt,
+  )) {
+    for (const word of session.assessment?.words ?? []) {
+      const key = normalizeWord(word.form);
+      if (key && !glossaryByKey.has(key)) {
+        glossaryByKey.set(key, { lemma: word.lemma, meaning: word.meaning });
+      }
+    }
+  }
+
   const evidenceByKey = new Map<string, WordEvidence[]>();
 
   const sorted = [...sessions].sort((a, b) => a.updatedAt - b.updatedAt);
@@ -192,6 +209,8 @@ export function projectVocabulary(
       bars = Math.min(bars, 1);
     }
 
+    const gloss = glossaryByKey.get(key);
+
     entries.push({
       key,
       bars,
@@ -202,6 +221,8 @@ export function projectVocabulary(
       dueAt,
       isDue: now >= dueAt,
       contexts,
+      meaning: gloss?.meaning,
+      lemma: gloss?.lemma,
     });
   }
 
