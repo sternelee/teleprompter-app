@@ -1,15 +1,30 @@
 import { DialogueSegment } from "@/types/dialogue";
+import { normalizeWord } from "@/services/vocabulary";
 
 const API_URL = "https://api.deepseek.com/chat/completions";
 const MODEL = "deepseek-chat";
+
+export interface GenerateDialogueOptions {
+  /** Earlier dialogue to continue from. */
+  previousSegments?: DialogueSegment[];
+  /** Due review words to weave naturally into the new dialogue. */
+  reviewWords?: string[];
+}
 
 function generateId(): string {
   return `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
 }
 
+function buildReviewWordsBlock(reviewWords: string[]): string {
+  if (reviewWords.length === 0) return "";
+
+  return `\n\nReview vocabulary: the learner practised these English words before but has not fully mastered them. Work each one naturally into the dialogue at least once where it fits the scene (inflected forms are fine): ${reviewWords.join(", ")}. If a word genuinely does not fit the scene, skip it instead of forcing it.`;
+}
+
 function buildPrompt(
   scene: string,
   previousSegments?: DialogueSegment[],
+  reviewWords: string[] = [],
 ): string {
   const hasPreviousDialogue = Boolean(previousSegments?.length);
   const previous = previousSegments?.length
@@ -18,10 +33,11 @@ function buildPrompt(
   const lengthRule = hasPreviousDialogue
     ? "Continue with 8-12 new lines (4-6 new exchanges)"
     : "Be 10-14 lines (5-7 exchanges)";
+  const reviewWordsBlock = buildReviewWordsBlock(reviewWords);
 
   return `You are creating English speaking practice dialogue for a language learner.
 
-Scene: ${scene}${previous}
+Scene: ${scene}${previous}${reviewWordsBlock}
 
 Generate a natural English dialogue for this scene. The dialogue should:
 - ${lengthRule}
@@ -59,8 +75,74 @@ function extractJson(text: string): string {
 export async function generateDialogue(
   scene: string,
   apiKey: string,
-  previousSegments?: DialogueSegment[],
+  options: GenerateDialogueOptions | DialogueSegment[] = {},
 ): Promise<DialogueSegment[]> {
+  // Back-compat: the third argument used to be `previousSegments` directly.
+  const normalized: GenerateDialogueOptions = Array.isArray(options)
+    ? { previousSegments: options }
+    : options;
+  const { previousSegments, reviewWords = [] } = normalized;
+
+  let segments = await requestDialogue(
+    scene,
+    apiKey,
+    previousSegments,
+    reviewWords,
+  );
+
+  // If the model ignored every review word, retry once with a stronger
+  // instruction before giving up on this batch.
+  if (
+    reviewWords.length >= 3 &&
+    countReviewCoverage(segments, reviewWords) === 0
+  ) {
+    segments = await requestDialogue(
+      scene,
+      apiKey,
+      previousSegments,
+      reviewWords,
+      /* emphasiseReview */ true,
+    );
+  }
+
+  return segments;
+}
+
+function countReviewCoverage(
+  segments: DialogueSegment[],
+  reviewWords: string[],
+): number {
+  const generated = new Set(
+    segments
+      .flatMap((segment) => segment.text.split(/\s+/))
+      .map((word) => normalizeWord(word)),
+  );
+
+  return reviewWords.filter((word) => {
+    const key = normalizeWord(word);
+    if (generated.has(key)) return true;
+    // Accept inflected forms of longer words ("ordering" covers "order").
+    if (key.length >= 4) {
+      for (const candidate of generated) {
+        if (candidate.startsWith(key)) return true;
+      }
+    }
+    return false;
+  }).length;
+}
+
+async function requestDialogue(
+  scene: string,
+  apiKey: string,
+  previousSegments: DialogueSegment[] | undefined,
+  reviewWords: string[],
+  emphasiseReview = false,
+): Promise<DialogueSegment[]> {
+  let prompt = buildPrompt(scene, previousSegments, reviewWords);
+  if (emphasiseReview) {
+    prompt += `\n\nIMPORTANT: the dialogue MUST naturally include at least half of the review vocabulary listed above.`;
+  }
+
   const response = await fetch(API_URL, {
     method: "POST",
     headers: {
@@ -75,7 +157,7 @@ export async function generateDialogue(
           content:
             "You are a helpful assistant that generates English practice dialogue.",
         },
-        { role: "user", content: buildPrompt(scene, previousSegments) },
+        { role: "user", content: prompt },
       ],
       temperature: 0.7,
       max_tokens: 4096,

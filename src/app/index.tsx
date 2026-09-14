@@ -26,6 +26,11 @@ import { useApp } from "@/contexts/app-context";
 import { useTheme } from "@/hooks/use-theme";
 import { useI18n, type MessageKey } from "@/i18n";
 import { generateDialogue } from "@/services/openai";
+import {
+  projectVocabulary,
+  selectReviewWords,
+  type VocabularyEntry,
+} from "@/services/vocabulary";
 import { formatRelativeTime } from "@/utils/time";
 
 const MAX_CONTENT_WIDTH = MaxContentWidth;
@@ -119,6 +124,14 @@ export default function HomeScreen() {
   const { t } = useI18n();
   const theme = useTheme();
   const styles = useMemo(() => createStyles(theme), [theme]);
+  const vocabularyEntries = useMemo<VocabularyEntry[]>(
+    () => projectVocabulary(sessions),
+    [sessions],
+  );
+  const vocabularyDueCount = useMemo(
+    () => vocabularyEntries.filter((entry) => entry.isDue).length,
+    [vocabularyEntries],
+  );
   const { width } = useWindowDimensions();
   const isCompact = width < 640;
   const [activeTab, setActiveTab] = useState<HomeTabKey>("scene");
@@ -180,7 +193,11 @@ export default function HomeScreen() {
     setScene(nextScene);
 
     try {
-      const nextSegments = await generateDialogue(nextScene, apiKey);
+      // Weave overdue review words from past sessions into the new dialogue.
+      const reviewWords = selectReviewWords(projectVocabulary(sessions));
+      const nextSegments = await generateDialogue(nextScene, apiKey, {
+        reviewWords,
+      });
       startNewSession(nextScene, nextSegments);
       router.push("/teleprompter");
     } catch (error) {
@@ -194,6 +211,7 @@ export default function HomeScreen() {
     }
   }, [
     apiKey,
+    sessions,
     setGenerationError,
     setIsGenerating,
     setScene,
@@ -455,6 +473,37 @@ export default function HomeScreen() {
                         ))}
                       </View>
                     </View>
+
+                    {vocabularyEntries.length > 0 ? (
+                      <Pressable
+                        onPress={() => router.push("/vocabulary")}
+                        style={styles.vocabPressable}
+                      >
+                        <ThemedView style={styles.vocabCard}>
+                          <View style={styles.vocabRow}>
+                            <ThemedText style={styles.vocabTitle}>
+                              {t("vocabulary.title")}
+                            </ThemedText>
+                            {vocabularyDueCount > 0 ? (
+                              <ThemedView style={styles.vocabDueBadge}>
+                                <ThemedText style={styles.vocabDueText}>
+                                  {t("vocabulary.dueCount", {
+                                    count: vocabularyDueCount,
+                                  })}
+                                </ThemedText>
+                              </ThemedView>
+                            ) : (
+                              <ThemedText style={styles.vocabCount}>
+                                {vocabularyEntries.length}
+                              </ThemedText>
+                            )}
+                          </View>
+                          <ThemedText style={styles.vocabHint}>
+                            {t("vocabulary.subtitle")}
+                          </ThemedText>
+                        </ThemedView>
+                      </Pressable>
+                    ) : null}
 
                     {sessions.length > 0 ? (
                       <View style={styles.sessionsBlock}>
@@ -1089,6 +1138,58 @@ function createStyles(theme: ThemePalette) {
       alignItems: "center",
       flexDirection: "row",
       gap: Spacing.sm,
+    },
+    vocabPressable: {
+      width: "100%",
+    },
+    vocabCard: {
+      backgroundColor: theme.card,
+      borderColor: theme.borderSoft,
+      borderRadius: Radius.base,
+      borderWidth: 1,
+      flexDirection: "column",
+      gap: Spacing.xs,
+      paddingHorizontal: Spacing.lg,
+      paddingVertical: Spacing.md,
+      width: "100%",
+      ...shadows.card,
+    },
+    vocabRow: {
+      alignItems: "center",
+      flex: 1,
+      flexDirection: "row",
+      gap: Spacing.sm,
+      justifyContent: "space-between",
+    },
+    vocabTitle: {
+      color: theme.text,
+      fontSize: 15,
+      fontWeight: "800",
+      letterSpacing: 0,
+    },
+    vocabHint: {
+      color: theme.textSoft,
+      fontSize: 12,
+      fontWeight: "600",
+      letterSpacing: 0,
+    },
+    vocabCount: {
+      color: theme.textSoft,
+      fontSize: 12,
+      fontWeight: "800",
+    },
+    vocabDueBadge: {
+      alignItems: "center",
+      backgroundColor: theme.primaryBg,
+      borderRadius: Radius.pill,
+      paddingHorizontal: Spacing.sm,
+      paddingVertical: 4,
+    },
+    vocabDueText: {
+      color: theme.primaryActive,
+      fontSize: 12,
+      fontWeight: "800",
+      letterSpacing: 0.02,
     },
     sectionLabel: {
       color: theme.textSoft,

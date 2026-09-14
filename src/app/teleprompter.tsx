@@ -22,6 +22,7 @@ import { useWordSpeech } from "@/hooks/use-word-speech";
 import { normalizeWord, useWordMatcher } from "@/hooks/use-word-matcher";
 import { useI18n } from "@/i18n";
 import { generateDialogue } from "@/services/openai";
+import { projectVocabulary, selectReviewWords } from "@/services/vocabulary";
 import type { Word } from "@/types/dialogue";
 import type { PracticeMode } from "@/types/session";
 
@@ -516,7 +517,10 @@ export default function TeleprompterScreen() {
     lastAutoContinueSegmentIdRef.current = finalSegment.id;
     setAutoContinueError(null);
     setIsContinuing(true);
-    void generateDialogue(scene, apiKey, segments)
+    void generateDialogue(scene, apiKey, {
+      previousSegments: segments,
+      reviewWords: selectReviewWords(projectVocabulary(sessions)),
+    })
       .then((newSegments) => {
         if (newSegments.length > 0) {
           appendSegments(newSegments);
@@ -544,6 +548,7 @@ export default function TeleprompterScreen() {
     remainingWords,
     scene,
     segments,
+    sessions,
     spokenCount,
     t,
   ]);
