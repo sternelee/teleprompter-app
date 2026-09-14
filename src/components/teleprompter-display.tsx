@@ -1,5 +1,6 @@
-import { memo, useMemo, useRef } from "react";
+import { memo, useEffect, useMemo, useRef, useState } from "react";
 import {
+  Platform,
   Pressable,
   StyleSheet,
   type LayoutChangeEvent,
@@ -56,6 +57,50 @@ export const TeleprompterDisplay = memo(function TeleprompterDisplay({
     corrections.map((correction) => correction.wordIndex),
   );
   const longPressHandledRef = useRef(false);
+  const isAndroid = Platform.OS === "android";
+
+  // Workaround for the Android 15/16 text clipping bug in React Native 0.85
+  // (facebook/react-native#53286, reintroduced in 0.85.0 by #56282, tracked as
+  // #56402; Expo SDK 56 pins RN 0.85.x so no fixed upgrade exists yet).
+  //
+  // Text nodes inside content-sized `flexWrap` rows can be measured too
+  // narrow while new siblings are being appended, so a freshly appended word
+  // renders clipped (e.g. "By" shows only "B") until some style change forces
+  // a re-measure — which is why highlighting the word "fixes" it.
+  //
+  // Once the appended words have settled, bump a tick that nudges every
+  // word's text style with a tiny (sub-pixel per step) padding epsilon. The
+  // changed style invalidates RN's text measure cache and re-measures each
+  // word at the now-stable container width, reproducing the "highlight fixes
+  // it" effect for the whole segment. The epsilon is strictly monotonic so a
+  // poisoned cache entry from a mid-append measurement is never reused.
+  const [remeasureTick, setRemeasureTick] = useState(0);
+
+  useEffect(() => {
+    if (!isAndroid) return;
+
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const frame = requestAnimationFrame(() => {
+      // Give Yoga one extra beat to commit the appended layout before forcing
+      // the re-measure pass.
+      timer = setTimeout(() => {
+        setRemeasureTick((tick) => tick + 1);
+      }, 50);
+    });
+
+    return () => {
+      cancelAnimationFrame(frame);
+      if (timer !== undefined) {
+        clearTimeout(timer);
+      }
+    };
+  }, [isAndroid, segments.length]);
+
+  // 0.1px per append: invisible in practice (a 30-append marathon session
+  // accumulates only 3px) while guaranteeing a fresh measure cache key.
+  const wordMeasureNudge = isAndroid
+    ? { paddingRight: 0.1 * remeasureTick }
+    : null;
 
   const handleWordPress = (word: Word) => {
     if (longPressHandledRef.current) {
@@ -165,6 +210,7 @@ export const TeleprompterDisplay = memo(function TeleprompterDisplay({
                       <ThemedText
                         style={[
                           styles.word,
+                          wordMeasureNudge,
                           { color: bubbleTextColor },
                           !isUserSegment && styles.partnerWord,
                           isSpoken && styles.wordSpoken,
