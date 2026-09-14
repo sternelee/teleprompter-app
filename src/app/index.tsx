@@ -14,6 +14,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 
 import { ThemedText } from "@/components/themed-text";
 import { ThemedView } from "@/components/themed-view";
+import { nunitoFamily } from "@/constants/fonts";
 import {
   createShadows,
   MaxContentWidth,
@@ -1038,7 +1039,7 @@ function createStyles(theme: ThemePalette) {
       borderRadius: Radius.base,
       borderWidth: 1,
       color: theme.text,
-      fontFamily: "Nunito",
+      fontFamily: nunitoFamily("500"),
       fontSize: 17,
       fontWeight: "500",
       lineHeight: 26,

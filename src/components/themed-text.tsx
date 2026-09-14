@@ -1,6 +1,7 @@
-import { Platform, StyleSheet, Text, type TextProps } from "react-native";
+import { Platform, StyleSheet, Text, type TextProps, type TextStyle } from "react-native";
 
-import { Fonts, ThemeColor } from "@/constants/theme";
+import { nunitoFamily, webMonoStack } from "@/constants/fonts";
+import { ThemeColor } from "@/constants/theme";
 import { useTheme } from "@/hooks/use-theme";
 
 export type ThemedTextProps = TextProps & {
@@ -35,32 +36,36 @@ export function ThemedText({
         ? theme.primary
         : theme.text;
 
-  return (
-    <Text
-      style={[
-        { color: resolvedColor },
-        styles.base,
-        type === "default" && styles.default,
-        type === "body" && styles.body,
-        type === "title" && styles.title,
-        type === "small" && styles.small,
-        type === "smallBold" && styles.smallBold,
-        type === "subtitle" && styles.subtitle,
-        type === "heading" && styles.heading,
-        type === "link" && styles.link,
-        type === "linkPrimary" && styles.linkPrimary,
-        type === "code" && styles.code,
-        weight && { fontWeight: weight },
-        style,
-      ]}
-      {...rest}
-    />
-  );
+  const flattened = StyleSheet.flatten([
+    styles.base,
+    type === "default" && styles.default,
+    type === "body" && styles.body,
+    type === "title" && styles.title,
+    type === "small" && styles.small,
+    type === "smallBold" && styles.smallBold,
+    type === "subtitle" && styles.subtitle,
+    type === "heading" && styles.heading,
+    type === "link" && styles.link,
+    type === "linkPrimary" && styles.linkPrimary,
+    type === "code" && styles.code,
+    weight && { fontWeight: weight },
+    { color: resolvedColor },
+    style,
+  ]) as TextStyle;
+
+  // Native text stacks cannot resolve `fontWeight` against a custom family,
+  // so map the effective weight onto the matching bundled Nunito face
+  // (see src/constants/fonts.ts). Web keeps the CSS family stacks.
+  const fontFamily =
+    type === "code" && Platform.OS === "web"
+      ? webMonoStack
+      : nunitoFamily(flattened.fontWeight);
+
+  return <Text style={[flattened, { fontFamily }]} {...rest} />;
 }
 
 const styles = StyleSheet.create({
   base: {
-    fontFamily: Fonts?.sans ?? "Nunito",
     letterSpacing: 0.01,
   },
   small: {
@@ -118,7 +123,6 @@ const styles = StyleSheet.create({
     letterSpacing: 0.02,
   },
   code: {
-    fontFamily: Fonts?.mono ?? "monospace",
     fontWeight: Platform.select({ android: "700", default: "600" }) as any,
     fontSize: 12,
     letterSpacing: 0.01,
