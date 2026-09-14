@@ -202,6 +202,49 @@ export const en = {
     permissionRequired: "Microphone permission is required to practice speaking.",
     failed: "Speech recognition failed. Please try again.",
   },
+  speechErrors: {
+    network:
+      "Can't reach the speech service. Check your network, or switch to the on-device model in Settings.",
+    permission: "Microphone access is required to practice speaking.",
+    noSpeech: "No speech detected. Move a little closer to the mic and try again.",
+    noMatch: "Couldn't make out that line. Please try again.",
+    audioCapture: "The microphone is busy or unavailable.",
+    busy: "The recognizer is busy. Retrying…",
+    languageNotSupported:
+      "This engine doesn't support English. Switch to the on-device model in Settings.",
+    serviceNotAllowed:
+      "No speech recognition service is available on this device.",
+    modelMissing:
+      "The on-device model isn't downloaded yet. Download it in Settings.",
+    modelLoadFailed: "Couldn't load the on-device model. Re-download it in Settings.",
+    unknown: "Speech recognition stopped unexpectedly. Please try again.",
+  },
+  engine: {
+    title: "Recognition engine",
+    note: "The system recognizer needs to reach Google or Apple. The on-device model works fully offline.",
+    auto: "Automatic",
+    autoHint: "Prefer the on-device model on Android, the system recognizer elsewhere",
+    platform: "System recognizer",
+    platformHint: "Google / Apple speech service",
+    offline: "On-device model",
+    offlineHint: "Works offline, no account needed",
+    activeNow: "In use: {engine}",
+  },
+  offlineModel: {
+    title: "Offline model",
+    note: "Streaming English model recognised entirely on the device.",
+    statusAbsent: "Not downloaded",
+    statusReady: "Ready",
+    statusDownloading: "Downloading {file}",
+    statusVerifying: "Verifying {file}",
+    statusError: "Download failed",
+    download: "Download ({size})",
+    cancel: "Cancel",
+    retry: "Retry",
+    remove: "Remove model",
+    fileProgress: "File {index} of {count}",
+    percent: "{percent}%",
+  },
 };
 
 export type TranslationKeys = typeof en;
@@ -397,6 +440,46 @@ export const zh: TranslationKeys = {
   speech: {
     permissionRequired: "口语练习需要麦克风权限。",
     failed: "语音识别失败，请重试。",
+  },
+  speechErrors: {
+    network:
+      "连不上语音识别服务。请检查网络，或在设置中改用离线模型。",
+    permission: "口语练习需要麦克风权限。",
+    noSpeech: "没有听到声音，请离麦克风近一点再试。",
+    noMatch: "这句没听清，请再读一次。",
+    audioCapture: "麦克风被占用或不可用。",
+    busy: "识别器忙碌中，正在重试…",
+    languageNotSupported: "该识别引擎不支持英文，请在设置中改用离线模型。",
+    serviceNotAllowed: "这台设备上没有可用的语音识别服务。",
+    modelMissing: "离线模型尚未下载，请到设置里下载。",
+    modelLoadFailed: "离线模型加载失败，请到设置里重新下载。",
+    unknown: "语音识别意外中止，请重试。",
+  },
+  engine: {
+    title: "识别引擎",
+    note: "系统识别需要连上 Google / Apple 的服务；离线模型完全在本机运行。",
+    auto: "自动",
+    autoHint: "Android 优先用离线模型，其他平台优先用系统识别",
+    platform: "系统识别",
+    platformHint: "Google / Apple 语音服务",
+    offline: "离线模型",
+    offlineHint: "完全离线，无需账号",
+    activeNow: "当前使用：{engine}",
+  },
+  offlineModel: {
+    title: "离线模型",
+    note: "流式英文模型，全部在本机完成识别。",
+    statusAbsent: "未下载",
+    statusReady: "已就绪",
+    statusDownloading: "正在下载 {file}",
+    statusVerifying: "正在校验 {file}",
+    statusError: "下载失败",
+    download: "下载（{size}）",
+    cancel: "取消",
+    retry: "重试",
+    remove: "删除模型",
+    fileProgress: "第 {index} / {count} 个文件",
+    percent: "{percent}%",
   },
 };
 

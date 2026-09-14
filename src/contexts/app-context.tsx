@@ -16,6 +16,12 @@ import {
 } from "@/services/session-storage";
 import type { DialogueSegment } from "@/types/dialogue";
 import type { PracticeSession } from "@/types/session";
+import {
+  DEFAULT_SPEECH_PREFERENCE,
+  loadSpeechPreference,
+  saveSpeechPreference,
+} from "@/services/speech/preference-storage";
+import type { SpeechBackendPreference } from "@/services/speech/types";
 
 
 interface AppState {
@@ -28,6 +34,9 @@ interface AppState {
   isLoadingSessions: boolean;
   sessions: PracticeSession[];
   currentSessionId: string | null;
+  /** Which speech engine to use: auto / system recognizer / on-device model. */
+  speechEngine: SpeechBackendPreference;
+  setSpeechEngine: (preference: SpeechBackendPreference) => void;
   setApiKey: (key: string) => void;
   clearStoredApiKey: () => void;
   setScene: (scene: string) => void;
@@ -64,6 +73,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const [sessions, setSessionsState] = useState<PracticeSession[]>([]);
   const [isLoadingSessions, setIsLoadingSessions] = useState(true);
   const [currentSessionId, setCurrentSessionId] = useState<string | null>(null);
+  const [speechEngine, setSpeechEngineState] =
+    useState<SpeechBackendPreference>(DEFAULT_SPEECH_PREFERENCE);
 
   useEffect(() => {
     let cancelled = false;
@@ -82,6 +93,12 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       }
     });
 
+    void loadSpeechPreference().then((preference) => {
+      if (!cancelled) {
+        setSpeechEngineState(preference);
+      }
+    });
+
     return () => {
       cancelled = true;
     };
@@ -95,6 +112,11 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const clearStoredApiKey = useCallback(() => {
     setApiKeyState("");
     void clearApiKey();
+  }, []);
+
+  const setSpeechEngine = useCallback((preference: SpeechBackendPreference) => {
+    setSpeechEngineState(preference);
+    void saveSpeechPreference(preference);
   }, []);
 
   const setScene = useCallback((s: string) => setSceneState(s), []);
@@ -205,6 +227,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         isLoadingSessions,
         sessions,
         currentSessionId,
+        speechEngine,
+        setSpeechEngine,
         setApiKey,
         clearStoredApiKey,
         setScene,

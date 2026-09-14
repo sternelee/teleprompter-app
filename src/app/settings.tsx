@@ -1,8 +1,15 @@
 import { useRouter } from "expo-router";
 import { useMemo, useState } from "react";
-import { Pressable, StyleSheet, TextInput, View } from "react-native";
+import {
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  TextInput,
+  View,
+} from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
+import { OfflineModelCard } from "@/components/offline-model-card";
 import { ThemedText } from "@/components/themed-text";
 import { ThemedView } from "@/components/themed-view";
 import {
@@ -25,6 +32,8 @@ export default function SettingsScreen() {
     clearStoredApiKey,
     sessions,
     clearAllSessions,
+    speechEngine,
+    setSpeechEngine,
   } = useApp();
   const { t, language, setLanguage } = useI18n();
   const theme = useTheme();
@@ -56,7 +65,11 @@ export default function SettingsScreen() {
   return (
     <ThemedView style={styles.container}>
       <SafeAreaView style={styles.safeArea}>
-        <View style={styles.header}>
+        <ScrollView
+          contentContainerStyle={styles.scrollContent}
+          showsVerticalScrollIndicator={false}
+        >
+          <View style={styles.header}>
           <Pressable onPress={() => router.back()} hitSlop={8}>
             <ThemedText type="link" style={styles.backLink}>
               {t("common.back")}
@@ -207,6 +220,65 @@ export default function SettingsScreen() {
           </View>
         </ThemedView>
 
+        <ThemedView type="backgroundContent" style={styles.card}>
+          <ThemedText type="smallBold" style={styles.cardTitle}>
+            {t("engine.title")}
+          </ThemedText>
+          <ThemedText type="small" themeColor="textSecondary">
+            {t("engine.note")}
+          </ThemedText>
+          <View style={styles.engineList}>
+            {(
+              [
+                { label: "engine.auto", hint: "engine.autoHint", value: "auto" },
+                {
+                  label: "engine.platform",
+                  hint: "engine.platformHint",
+                  value: "platform",
+                },
+                {
+                  label: "engine.offline",
+                  hint: "engine.offlineHint",
+                  value: "offline",
+                },
+              ] as const
+            ).map((option) => {
+              const isActive = speechEngine === option.value;
+
+              return (
+                <Pressable
+                  key={option.value}
+                  onPress={() => setSpeechEngine(option.value)}
+                >
+                  <ThemedView
+                    style={[
+                      styles.engineOption,
+                      isActive && styles.engineOptionActive,
+                    ]}
+                  >
+                    <View style={styles.engineOptionCopy}>
+                      <ThemedText
+                        type="smallBold"
+                        style={styles.engineOptionTitle}
+                      >
+                        {t(option.label)}
+                      </ThemedText>
+                      <ThemedText type="small" style={styles.engineOptionHint}>
+                        {t(option.hint)}
+                      </ThemedText>
+                    </View>
+                    {isActive ? (
+                      <ThemedText style={styles.engineCheck}>✓</ThemedText>
+                    ) : null}
+                  </ThemedView>
+                </Pressable>
+              );
+            })}
+          </View>
+        </ThemedView>
+
+        <OfflineModelCard />
+
         {sessions.length > 0 ? (
           <Pressable
             onPress={() => {
@@ -260,6 +332,7 @@ export default function SettingsScreen() {
             </ThemedText>
           </ThemedView>
         </Pressable>
+        </ScrollView>
       </SafeAreaView>
     </ThemedView>
   );
@@ -323,6 +396,40 @@ function createStyles(theme: ThemePalette) {
     },
     disabledButton: {
       opacity: 0.6,
+    },
+    engineCheck: {
+      color: theme.primary,
+      fontSize: 16,
+      fontWeight: "900",
+    },
+    engineList: {
+      gap: Spacing.sm,
+      marginTop: Spacing.sm,
+    },
+    engineOption: {
+      alignItems: "center",
+      backgroundColor: theme.chip,
+      borderColor: "transparent",
+      borderRadius: Radius.base,
+      borderWidth: 2,
+      flexDirection: "row",
+      gap: Spacing.sm,
+      paddingHorizontal: Spacing.md,
+      paddingVertical: Spacing.sm,
+    },
+    engineOptionActive: {
+      borderColor: theme.primary,
+    },
+    engineOptionCopy: {
+      flex: 1,
+      gap: 2,
+    },
+    engineOptionHint: {
+      color: theme.textMuted,
+      lineHeight: 16,
+    },
+    engineOptionTitle: {
+      color: theme.text,
     },
     doneButton: {
       alignItems: "center",
@@ -405,10 +512,14 @@ function createStyles(theme: ThemePalette) {
     safeArea: {
       alignSelf: "center",
       flex: 1,
-      gap: Spacing.lg,
       maxWidth: MaxContentWidth,
       paddingHorizontal: Spacing.lg,
       width: "100%",
+    },
+    scrollContent: {
+      gap: Spacing.lg,
+      paddingBottom: Spacing.xl,
+      paddingTop: Spacing.lg,
     },
     testButton: {
       alignItems: "center",

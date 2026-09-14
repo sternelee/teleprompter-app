@@ -204,22 +204,14 @@ export default function TeleprompterScreen() {
 
   const { speak, speakingWord, stopSpeaking } = useWordSpeech();
 
-  const speechMessages = useMemo(
-    () => ({
-      permissionRequired: t("speech.permissionRequired"),
-      failed: t("speech.failed"),
-    }),
-    [t],
-  );
-
   const {
     isListening,
     permissionResponse,
     requestPermission,
     startListening,
     stopListening,
+    activeBackendId,
   } = useSpeechRecognition({
-    messages: speechMessages,
     onResult: handleSpeechResult,
     onError: handleSpeechError,
   });
@@ -275,6 +267,14 @@ export default function TeleprompterScreen() {
         : t("teleprompter.speakerPartner"),
     [t],
   );
+
+  const engineLabel =
+    activeBackendId === "offline"
+      ? t("engine.offline")
+      : activeBackendId === "platform"
+        ? t("engine.platform")
+        : null;
+
 
   const currentCue = useMemo(() => {
     if (totalWords === 0) {
@@ -952,6 +952,12 @@ export default function TeleprompterScreen() {
                   </ThemedView>
                 ) : null}
 
+                {engineLabel ? (
+                  <ThemedText type="small" style={styles.engineLabel}>
+                    {t("engine.activeNow", { engine: engineLabel })}
+                  </ThemedText>
+                ) : null}
+
                 <ThemedView
                   type="backgroundElement"
                   style={styles.interactionHintCard}
@@ -1196,6 +1202,9 @@ function createStyles(theme: ThemePalette) {
       color: theme.primary,
       fontSize: 13,
       fontWeight: "800",
+    },
+    engineLabel: {
+      color: theme.textMuted,
     },
     header: {
       alignItems: "center",
